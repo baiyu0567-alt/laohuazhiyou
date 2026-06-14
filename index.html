@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#1a1a2e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>老花之友 — 大字号阅读助手</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ═══ 首页视图 ═══ -->
+<div id="view-home" class="view active">
+  <header class="app-header">
+    <h1>👓 老花之友</h1>
+    <p class="subtitle">不戴眼镜也能看清</p>
+  </header>
+
+  <main class="main-menu">
+    <button class="action-card" onclick="showView('reader')" id="btn-paste">
+      <span class="card-icon">📝</span>
+      <span class="card-title">粘贴阅读</span>
+      <span class="card-desc">粘贴文字或链接，立即用大字号舒适阅读</span>
+    </button>
+
+    <button class="action-card" onclick="showView('camera')" id="btn-camera">
+      <span class="card-icon">📷</span>
+      <span class="card-title">拍照阅读</span>
+      <span class="card-desc">拍药瓶、菜单、说明书，放大给你看</span>
+    </button>
+
+    <button class="action-card" onclick="showView('settings')" id="btn-settings">
+      <span class="card-icon">⚙️</span>
+      <span class="card-title">阅读设置</span>
+      <span class="card-desc">调节字体、对比度、色温，找到最舒服的阅读方式</span>
+    </button>
+  </main>
+
+  <footer class="app-footer">
+    <p>v0.1 · 数据仅保存在本设备</p>
+  </footer>
+</div>
+
+<!-- ═══ 阅读器视图 ═══ -->
+<div id="view-reader" class="view">
+  <header class="view-header">
+    <button class="btn-back" onclick="showView('home')">← 返回</button>
+    <span class="view-title">阅读模式</span>
+    <button class="btn-icon" onclick="toggleControls()" title="显示/隐藏控制栏">⚙️</button>
+  </header>
+
+  <div id="reader-input-area" class="reader-input">
+    <textarea id="reader-textarea" placeholder="在此粘贴文字，或输入网页链接（支持中英文）..." rows="4"></textarea>
+    <button class="btn-primary" onclick="startReading()">开始阅读</button>
+  </div>
+
+  <div id="reader-display" class="reader-display hidden">
+    <div id="reader-content" class="reader-content"></div>
+  </div>
+
+  <div id="reader-controls" class="reader-controls hidden">
+    <div class="ctrl-group">
+      <label>字号</label>
+      <div class="ctrl-row">
+        <button onclick="adjustFontSize(-1)">A−</button>
+        <span id="font-size-display">24px</span>
+        <button onclick="adjustFontSize(1)">A+</button>
+      </div>
+    </div>
+    <div class="ctrl-group">
+      <label>主题</label>
+      <div class="theme-btns">
+        <button class="theme-btn theme-light" onclick="setTheme('light')" data-theme="light">☀️ 白</button>
+        <button class="theme-btn theme-sepia" onclick="setTheme('sepia')" data-theme="sepia">🟡 暖</button>
+        <button class="theme-btn theme-dark" onclick="setTheme('dark')" data-theme="dark">🌙 暗</button>
+        <button class="theme-btn theme-yellow" onclick="setTheme('yellow')" data-theme="yellow">💛 黄底</button>
+      </div>
+    </div>
+    <div class="ctrl-group">
+      <label>行距</label>
+      <div class="ctrl-row">
+        <button onclick="adjustLineHeight(-0.2)">−</button>
+        <span id="lh-display">1.8</span>
+        <button onclick="adjustLineHeight(0.2)">+</button>
+      </div>
+    </div>
+    <div class="ctrl-group">
+      <label>字间距</label>
+      <div class="ctrl-row">
+        <button onclick="adjustLetterSpacing(-0.5)">−</button>
+        <span id="ls-display">1.0px</span>
+        <button onclick="adjustLetterSpacing(0.5)">+</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 拍照视图 ═══ -->
+<div id="view-camera" class="view">
+  <header class="view-header">
+    <button class="btn-back" onclick="stopCamera(); showView('home')">← 返回</button>
+    <span class="view-title">拍照阅读</span>
+  </header>
+
+  <div id="camera-area" class="camera-area">
+    <video id="camera-preview" autoplay playsinline class="camera-preview"></video>
+    <div class="camera-overlay">
+      <p class="camera-hint">将文字对准镜头</p>
+    </div>
+    <div class="camera-actions">
+      <button class="btn-capture" onclick="capturePhoto()">📸 拍照</button>
+      <button class="btn-upload" onclick="document.getElementById('file-input').click()">🖼️ 选图片</button>
+      <input type="file" id="file-input" accept="image/*" style="display:none" onchange="handleFileUpload(event)">
+    </div>
+  </div>
+
+  <div id="ocr-result" class="ocr-result hidden">
+    <div id="ocr-text" class="reader-content"></div>
+    <div class="ocr-actions">
+      <button class="btn-primary" onclick="retakePhoto()">重新拍照</button>
+      <button class="btn-secondary" onclick="copyOcrText()">📋 复制文字</button>
+    </div>
+    <div class="ocr-progress hidden" id="ocr-progress">
+      <p>OCR 识别中... <span id="ocr-status"></span></p>
+      <div class="progress-bar"><div id="ocr-bar" class="progress-fill"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 设置视图 ═══ -->
+<div id="view-settings" class="view">
+  <header class="view-header">
+    <button class="btn-back" onclick="showView('home')">← 返回</button>
+    <span class="view-title">阅读设置</span>
+  </header>
+
+  <div class="settings-content">
+    <div class="setting-group">
+      <h3>👁️ 阅读距离校准</h3>
+      <p class="setting-desc">把手机放到你平时看书最舒服的距离，然后点校准。</p>
+      <button class="btn-primary" onclick="calibrateDistance()">📏 开始校准</button>
+      <p id="distance-result" class="setting-result hidden"></p>
+    </div>
+
+    <div class="setting-group">
+      <h3>📏 默认字号</h3>
+      <input type="range" id="setting-fontsize" min="18" max="72" value="28" oninput="updateSettingDisplay()">
+      <span id="setting-fontsize-display">28px</span>
+    </div>
+
+    <div class="setting-group">
+      <h3>🎨 默认主题</h3>
+      <div class="theme-btns">
+        <button class="theme-btn theme-light" onclick="setDefaultTheme('light')">☀️ 白</button>
+        <button class="theme-btn theme-sepia" onclick="setDefaultTheme('sepia')">🟡 暖</button>
+        <button class="theme-btn theme-dark" onclick="setDefaultTheme('dark')">🌙 暗</button>
+        <button class="theme-btn theme-yellow" onclick="setDefaultTheme('yellow')">💛 黄底</button>
+      </div>
+    </div>
+
+    <div class="setting-group">
+      <h3>📦 阅读标尺</h3>
+      <label class="toggle-label">
+        <input type="checkbox" id="setting-ruler" onchange="toggleRuler()">
+        <span>启用阅读标尺（高亮当前行，减少跳行）</span>
+      </label>
+    </div>
+
+    <div class="setting-group">
+      <h3>💾 数据管理</h3>
+      <button class="btn-secondary" onclick="clearAllData()">清除所有本地数据</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>
