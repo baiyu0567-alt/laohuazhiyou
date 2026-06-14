@@ -1,61 +1,65 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#1a1a2e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>老花之友 — 大字号阅读助手</title>
+<title>PresbyFriend — Large Text Reading Assistant</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
-<!-- ═══ 首页视图 ═══ -->
+<!-- ═══ Home View ═══ -->
 <div id="view-home" class="view active">
   <header class="app-header">
-    <h1>👓 老花之友</h1>
-    <p class="subtitle">不戴眼镜也能看清</p>
+    <h1 data-i18n="appName">PresbyFriend</h1>
+    <p class="subtitle" data-i18n="subtitle">Read clearly without reading glasses</p>
   </header>
 
   <main class="main-menu">
-    <button class="action-card" onclick="showView('reader')" id="btn-paste">
+    <button class="action-card" onclick="showView('reader')">
       <span class="card-icon">📝</span>
-      <span class="card-title">粘贴阅读</span>
-      <span class="card-desc">粘贴文字或链接，立即用大字号舒适阅读</span>
+      <span class="card-title" data-i18n="pasteRead">Paste &amp; Read</span>
+      <span class="card-desc" data-i18n="pasteDesc">Paste text or a URL for large, clear reading</span>
     </button>
 
-    <button class="action-card" onclick="showView('camera')" id="btn-camera">
+    <button class="action-card" onclick="showView('camera')">
       <span class="card-icon">📷</span>
-      <span class="card-title">拍照阅读</span>
-      <span class="card-desc">拍药瓶、菜单、说明书，放大给你看</span>
+      <span class="card-title" data-i18n="cameraRead">Snap &amp; Read</span>
+      <span class="card-desc" data-i18n="cameraDesc">Snap photos of labels, menus, fine print</span>
     </button>
 
-    <button class="action-card" onclick="showView('settings')" id="btn-settings">
+    <button class="action-card" onclick="showView('settings')">
       <span class="card-icon">⚙️</span>
-      <span class="card-title">阅读设置</span>
-      <span class="card-desc">调节字体、对比度、色温，找到最舒服的阅读方式</span>
+      <span class="card-title" data-i18n="settings">Settings</span>
+      <span class="card-desc" data-i18n="settingsDesc">Adjust font, contrast &amp; theme</span>
+    </button>
+
+    <button class="action-card lang-toggle" onclick="toggleLanguage()" style="background:var(--bg-elevated); text-align:center; align-items:center;">
+      <span style="font-size:var(--fs-xl);font-weight:600;">中文</span>
     </button>
   </main>
 
   <footer class="app-footer">
-    <p>v0.1 · 数据仅保存在本设备</p>
+    <p data-i18n="footer">v0.1 · Data stored locally only</p>
   </footer>
 </div>
 
-<!-- ═══ 阅读器视图 ═══ -->
+<!-- ═══ Reader View ═══ -->
 <div id="view-reader" class="view">
   <header class="view-header">
-    <button class="btn-back" onclick="showView('home')">← 返回</button>
-    <span class="view-title">阅读模式</span>
-    <button class="btn-icon" onclick="toggleControls()" title="显示/隐藏控制栏">⚙️</button>
+    <button class="btn-back" onclick="showView('home')" data-i18n="back">← Back</button>
+    <span class="view-title" data-i18n="readerTitle">Reading Mode</span>
+    <button class="btn-icon" onclick="toggleControls()" title="Toggle controls">⚙️</button>
   </header>
 
   <div id="reader-input-area" class="reader-input">
-    <textarea id="reader-textarea" placeholder="在此粘贴文字，或输入网页链接（支持中英文）..." rows="4"></textarea>
-    <button class="btn-primary" onclick="startReading()">开始阅读</button>
+    <textarea id="reader-textarea" data-i18n="pasteHere" placeholder="Paste text here, or enter a webpage URL..." rows="4"></textarea>
+    <button class="btn-primary" onclick="startReading()" data-i18n="startReading">Start Reading</button>
   </div>
 
   <div id="reader-display" class="reader-display hidden">
@@ -64,56 +68,56 @@
 
   <div id="reader-controls" class="reader-controls hidden">
     <div class="ctrl-group">
-      <label>字号</label>
+      <label data-i18n="fontSize">Font Size</label>
       <div class="ctrl-row">
         <button onclick="adjustFontSize(-1)">A−</button>
-        <span id="font-size-display">24px</span>
+        <span class="fs-display">28px</span>
         <button onclick="adjustFontSize(1)">A+</button>
       </div>
     </div>
     <div class="ctrl-group">
-      <label>主题</label>
+      <label data-i18n="theme">Theme</label>
       <div class="theme-btns">
-        <button class="theme-btn theme-light" onclick="setTheme('light')" data-theme="light">☀️ 白</button>
-        <button class="theme-btn theme-sepia" onclick="setTheme('sepia')" data-theme="sepia">🟡 暖</button>
-        <button class="theme-btn theme-dark" onclick="setTheme('dark')" data-theme="dark">🌙 暗</button>
-        <button class="theme-btn theme-yellow" onclick="setTheme('yellow')" data-theme="yellow">💛 黄底</button>
+        <button class="theme-btn theme-light" onclick="setTheme('light')" data-theme="light" data-i18n="light">White</button>
+        <button class="theme-btn theme-sepia" onclick="setTheme('sepia')" data-theme="sepia" data-i18n="sepia">Warm</button>
+        <button class="theme-btn theme-dark" onclick="setTheme('dark')" data-theme="dark" data-i18n="dark">Dark</button>
+        <button class="theme-btn theme-yellow" onclick="setTheme('yellow')" data-theme="yellow" data-i18n="yellowBg">Yellow</button>
       </div>
     </div>
     <div class="ctrl-group">
-      <label>行距</label>
+      <label data-i18n="lineHeight">Line Space</label>
       <div class="ctrl-row">
         <button onclick="adjustLineHeight(-0.2)">−</button>
-        <span id="lh-display">1.8</span>
+        <span class="lh-display">1.8</span>
         <button onclick="adjustLineHeight(0.2)">+</button>
       </div>
     </div>
     <div class="ctrl-group">
-      <label>字间距</label>
+      <label data-i18n="letterSpacing">Letter Space</label>
       <div class="ctrl-row">
         <button onclick="adjustLetterSpacing(-0.5)">−</button>
-        <span id="ls-display">1.0px</span>
+        <span class="ls-display">1.0px</span>
         <button onclick="adjustLetterSpacing(0.5)">+</button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ═══ 拍照视图 ═══ -->
+<!-- ═══ Camera View ═══ -->
 <div id="view-camera" class="view">
   <header class="view-header">
-    <button class="btn-back" onclick="stopCamera(); showView('home')">← 返回</button>
-    <span class="view-title">拍照阅读</span>
+    <button class="btn-back" onclick="stopCamera(); showView('home')" data-i18n="back">← Back</button>
+    <span class="view-title" data-i18n="cameraTitle">Snap &amp; Read</span>
   </header>
 
   <div id="camera-area" class="camera-area">
     <video id="camera-preview" autoplay playsinline class="camera-preview"></video>
     <div class="camera-overlay">
-      <p class="camera-hint">将文字对准镜头</p>
+      <p class="camera-hint" data-i18n="cameraHint">Point camera at text</p>
     </div>
     <div class="camera-actions">
-      <button class="btn-capture" onclick="capturePhoto()">📸 拍照</button>
-      <button class="btn-upload" onclick="document.getElementById('file-input').click()">🖼️ 选图片</button>
+      <button class="btn-capture" onclick="capturePhoto()" title="Capture" data-i18n="capture">📸 Capture</button>
+      <button class="btn-upload" onclick="document.getElementById('file-input').click()" data-i18n="upload">🖼️ Upload</button>
       <input type="file" id="file-input" accept="image/*" style="display:none" onchange="handleFileUpload(event)">
     </div>
   </div>
@@ -121,58 +125,59 @@
   <div id="ocr-result" class="ocr-result hidden">
     <div id="ocr-text" class="reader-content"></div>
     <div class="ocr-actions">
-      <button class="btn-primary" onclick="retakePhoto()">重新拍照</button>
-      <button class="btn-secondary" onclick="copyOcrText()">📋 复制文字</button>
+      <button class="btn-primary" onclick="retakePhoto()" data-i18n="retake">Retake</button>
+      <button class="btn-secondary" onclick="copyOcrText()" data-i18n="copyText">📋 Copy Text</button>
     </div>
     <div class="ocr-progress hidden" id="ocr-progress">
-      <p>OCR 识别中... <span id="ocr-status"></span></p>
+      <p><span id="ocr-status"></span></p>
       <div class="progress-bar"><div id="ocr-bar" class="progress-fill"></div></div>
     </div>
   </div>
 </div>
 
-<!-- ═══ 设置视图 ═══ -->
+<!-- ═══ Settings View ═══ -->
 <div id="view-settings" class="view">
   <header class="view-header">
-    <button class="btn-back" onclick="showView('home')">← 返回</button>
-    <span class="view-title">阅读设置</span>
+    <button class="btn-back" onclick="showView('home')" data-i18n="back">← Back</button>
+    <span class="view-title" data-i18n="settingsTitle">Settings</span>
   </header>
 
   <div class="settings-content">
     <div class="setting-group">
-      <h3>👁️ 阅读距离校准</h3>
-      <p class="setting-desc">把手机放到你平时看书最舒服的距离，然后点校准。</p>
-      <button class="btn-primary" onclick="calibrateDistance()">📏 开始校准</button>
+      <h3 data-i18n="distanceCal">👁️ Reading Distance</h3>
+      <p class="setting-desc" data-i18n="distanceDesc">Hold your phone at your most comfortable reading distance, then calibrate.</p>
+      <button class="btn-primary" onclick="calibrateDistance()" data-i18n="calibrate">📏 Calibrate</button>
       <p id="distance-result" class="setting-result hidden"></p>
     </div>
 
     <div class="setting-group">
-      <h3>📏 默认字号</h3>
+      <h3 data-i18n="defaultFont">📏 Default Font Size</h3>
       <input type="range" id="setting-fontsize" min="18" max="72" value="28" oninput="updateSettingDisplay()">
-      <span id="setting-fontsize-display">28px</span>
+      <span class="setting-fs-display">28px</span>
     </div>
 
     <div class="setting-group">
-      <h3>🎨 默认主题</h3>
+      <h3 data-i18n="defaultTheme">🎨 Default Theme</h3>
       <div class="theme-btns">
-        <button class="theme-btn theme-light" onclick="setDefaultTheme('light')">☀️ 白</button>
-        <button class="theme-btn theme-sepia" onclick="setDefaultTheme('sepia')">🟡 暖</button>
-        <button class="theme-btn theme-dark" onclick="setDefaultTheme('dark')">🌙 暗</button>
-        <button class="theme-btn theme-yellow" onclick="setDefaultTheme('yellow')">💛 黄底</button>
+        <button class="theme-btn theme-light" onclick="setDefaultTheme('light')" data-theme="light" data-i18n="light">White</button>
+        <button class="theme-btn theme-sepia" onclick="setDefaultTheme('sepia')" data-theme="sepia" data-i18n="sepia">Warm</button>
+        <button class="theme-btn theme-dark" onclick="setDefaultTheme('dark')" data-theme="dark" data-i18n="dark">Dark</button>
+        <button class="theme-btn theme-yellow" onclick="setDefaultTheme('yellow')" data-theme="yellow" data-i18n="yellowBg">Yellow</button>
       </div>
     </div>
 
     <div class="setting-group">
-      <h3>📦 阅读标尺</h3>
+      <h3 data-i18n="readingRuler">📦 Reading Ruler</h3>
+      <p class="setting-desc" data-i18n="rulerDesc">Highlight current line to reduce skipping</p>
       <label class="toggle-label">
         <input type="checkbox" id="setting-ruler" onchange="toggleRuler()">
-        <span>启用阅读标尺（高亮当前行，减少跳行）</span>
+        <span data-i18n="readingRuler">📦 Reading Ruler</span>
       </label>
     </div>
 
     <div class="setting-group">
-      <h3>💾 数据管理</h3>
-      <button class="btn-secondary" onclick="clearAllData()">清除所有本地数据</button>
+      <h3 data-i18n="dataMgmt">💾 Data Management</h3>
+      <button class="btn-secondary" onclick="clearAllData()" data-i18n="clearData">Clear All Local Data</button>
     </div>
   </div>
 </div>

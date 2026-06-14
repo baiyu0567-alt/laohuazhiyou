@@ -1,7 +1,7 @@
 {
-  "name": "老花之友 — 大字号阅读助手",
-  "short_name": "老花之友",
-  "description": "不戴老花镜也能看清手机上的小字。拍照识别、大字号阅读、自适应显示。",
+  "name": "PresbyFriend — Large Text Reading Assistant",
+  "short_name": "PresbyFriend",
+  "description": "Read small text without reading glasses. Snap, OCR, and read in large clear font.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1a1a2e",
@@ -9,17 +9,7 @@
   "orientation": "portrait",
   "categories": ["accessibility", "health", "productivity"],
   "icons": [
-    {
-      "src": "icons/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "icons/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
+    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
   ]
 }
