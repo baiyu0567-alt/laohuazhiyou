@@ -116,7 +116,10 @@
       <p class="camera-hint" data-i18n="cameraHint">Point camera at text</p>
     </div>
     <div class="camera-actions">
-      <button class="btn-capture" onclick="capturePhoto()" title="Capture" data-i18n="capture">📸 Capture</button>
+      <div class="capture-group">
+        <button class="btn-capture" onclick="capturePhoto()" aria-label="Capture">📸</button>
+        <span class="capture-label" data-i18n="capture">Capture</span>
+      </div>
       <button class="btn-upload" onclick="document.getElementById('file-input').click()" data-i18n="upload">🖼️ Upload</button>
       <input type="file" id="file-input" accept="image/*" style="display:none" onchange="handleFileUpload(event)">
     </div>

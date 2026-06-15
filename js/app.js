@@ -33,7 +33,7 @@ const I18N = {
     letterSpacing: 'Letter Space',
     cameraTitle: 'Snap & Read',
     cameraHint: 'Point camera at text',
-    capture: '📸 Capture',
+    capture: 'Capture',
     upload: '🖼️ Upload',
     retake: 'Retake',
     copyText: '📋 Copy Text',
@@ -90,7 +90,7 @@ const I18N = {
     letterSpacing: '字间距',
     cameraTitle: '拍照阅读',
     cameraHint: '将文字对准镜头',
-    capture: '📸 拍照',
+    capture: '拍照',
     upload: '🖼️ 选图片',
     retake: '重新拍照',
     copyText: '📋 复制文字',
@@ -414,12 +414,19 @@ function calibrateDistance() {
 
 // ═══ Camera + OCR ═══
 
+let cameraReady = false;
+
 async function startCamera() {
+  cameraReady = false;
   try {
     cameraStream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
     });
-    document.getElementById('camera-preview').srcObject = cameraStream;
+    const video = document.getElementById('camera-preview');
+    video.srcObject = cameraStream;
+    await new Promise((resolve) => {
+      video.onloadedmetadata = () => { cameraReady = true; resolve(); };
+    });
   } catch (e) {
     alert('Camera error: ' + e.message + '\nYou can upload an image instead.');
   }
@@ -431,10 +438,18 @@ function stopCamera() {
 
 function capturePhoto() {
   const video = document.getElementById('camera-preview');
+  if (!cameraReady || !video.videoWidth || !video.videoHeight) {
+    alert('Camera is still starting up. Please wait a moment and try again.');
+    return;
+  }
   const canvas = document.createElement('canvas');
-  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
   canvas.getContext('2d').drawImage(video, 0, 0);
-  canvas.toBlob(blob => processImage(blob), 'image/jpeg', 0.95);
+  canvas.toBlob(blob => {
+    if (blob) processImage(blob);
+    else alert('Failed to capture. Try uploading an image instead.');
+  }, 'image/jpeg', 0.95);
 }
 
 function handleFileUpload(event) {
