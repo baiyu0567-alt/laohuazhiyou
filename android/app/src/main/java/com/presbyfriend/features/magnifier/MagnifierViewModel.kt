@@ -8,6 +8,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -65,7 +66,7 @@ class MagnifierViewModel(application: Application) : AndroidViewModel(applicatio
 
             cameraProvider.unbindAll()
             camera = cameraProvider.bindToLifecycle(
-                lifecycleOwner = androidx.lifecycle.ProcessLifecycleOwner.get(),
+                lifecycleOwner = ProcessLifecycleOwner.get(),
                 cameraSelector,
                 preview,
                 imageAnalysis

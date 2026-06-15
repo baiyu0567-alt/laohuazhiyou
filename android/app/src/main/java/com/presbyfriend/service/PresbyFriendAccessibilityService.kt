@@ -37,7 +37,7 @@ class PresbyFriendAccessibilityService : AccessibilityService() {
 
         val button = ImageButton(this).apply {
             setImageResource(android.R.drawable.ic_menu_search)
-            setBackgroundColor(0xFF007AFF.toInt())
+            setBackgroundColor(android.graphics.Color.parseColor("#007AFF"))
             setOnClickListener {
                 val intent = Intent(this@PresbyFriendAccessibilityService, MainActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

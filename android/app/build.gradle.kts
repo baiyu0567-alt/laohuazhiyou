@@ -57,6 +57,7 @@ dependencies {
     implementation(libs.activity.compose)
     implementation(libs.lifecycle.runtime)
     implementation(libs.lifecycle.viewmodel)
+    implementation(libs.lifecycle.process)
 
     // CameraX
     implementation(libs.camerax.core)

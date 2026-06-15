@@ -4,13 +4,17 @@ import android.app.Activity
 import android.app.Application
 import com.android.billingclient.api.*
 import com.presbyfriend.PresbyFriendApp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 class BillingManager(application: Application) {
 
     private val store = (application as PresbyFriendApp).settingsStore
+    private val scope = CoroutineScope(Dispatchers.IO)
     private val billingClient = BillingClient.newBuilder(application)
         .setListener(::onPurchasesUpdated)
         .enablePendingPurchases()
@@ -43,20 +47,18 @@ class BillingManager(application: Application) {
     }
 
     private fun loadProducts() {
-        val params = QueryProductDetailsParams.newBuilder().apply {
-            productIds.forEach { id ->
-                setProductList(
-                    listOf(
-                        QueryProductDetailsParams.Product.newBuilder()
-                            .setProductId(id)
-                            .setProductType(BillingClient.ProductType.SUBS)
-                            .build()
-                    )
-                )
-            }
-        }.build()
+        val productList = productIds.map { id ->
+            QueryProductDetailsParams.Product.newBuilder()
+                .setProductId(id)
+                .setProductType(BillingClient.ProductType.SUBS)
+                .build()
+        }
 
-        billingClient.queryProductDetailsAsync(params) { result, details ->
+        val params = QueryProductDetailsParams.newBuilder()
+            .setProductList(productList)
+            .build()
+
+        billingClient.queryProductDetailsAsync(params) { _, details ->
             _products.value = details ?: emptyList()
         }
     }
@@ -82,10 +84,10 @@ class BillingManager(application: Application) {
             QueryPurchasesParams.newBuilder()
                 .setProductType(BillingClient.ProductType.SUBS)
                 .build()
-        ) { result, purchases ->
+        ) { _, purchases ->
             val isPro = purchases.any { productIds.contains(it.products.firstOrNull()) }
             if (isPro) {
-                kotlinx.coroutines.runBlocking { store.setIsPro(true) }
+                scope.launch { store.setIsPro(true) }
             }
             onResult(isPro)
         }
@@ -95,9 +97,12 @@ class BillingManager(application: Application) {
         if (result.responseCode == BillingClient.BillingResponseCode.OK && purchases != null) {
             for (purchase in purchases) {
                 if (productIds.contains(purchase.products.firstOrNull())) {
-                    kotlinx.coroutines.runBlocking { store.setIsPro(true) }
+                    scope.launch { store.setIsPro(true) }
                     if (purchase.purchaseState == Purchase.PurchaseState.PURCHASED) {
-                        purchase.acknowledgeAsync {}.let {} // Acknowledge silently
+                        val ackParams = AcknowledgePurchaseParams.newBuilder()
+                            .setPurchaseToken(purchase.purchaseToken)
+                            .build()
+                        billingClient.acknowledgePurchase(ackParams) { _ -> }
                     }
                     pendingCallback?.invoke(true)
                     pendingCallback = null

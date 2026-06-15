@@ -11,9 +11,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.presbyfriend.core.i18n.L10n
 
@@ -25,6 +26,7 @@ fun ZoomSlider(
 ) {
     val minZoom = 1.0f
     val maxZoom = 8.0f
+    val density = LocalDensity.current
 
     Column(modifier = modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
@@ -34,7 +36,7 @@ fun ZoomSlider(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp)
@@ -42,17 +44,21 @@ fun ZoomSlider(
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
                 .pointerInput(Unit) {
                     detectHorizontalDragGestures { change, _ ->
-                        val fraction = change.position.x / size.width
-                        val newZoom = (minZoom + (maxZoom - minZoom) * fraction)
-                            .coerceIn(minZoom, maxZoom)
+                        val fraction = (change.position.x / size.width)
+                            .coerceIn(0f, 1f)
+                        val newZoom = minZoom + (maxZoom - minZoom) * fraction
                         onZoomChange(newZoom)
                         change.consume()
                     }
                 },
             contentAlignment = Alignment.CenterStart
         ) {
+            val fraction = ((zoomLevel - minZoom) / (maxZoom - minZoom)).coerceIn(0f, 1f)
+            val trackWidth = maxWidth
+            val thumbSize = 32.dp
+            val thumbOffset = trackWidth * fraction - thumbSize / 2
+
             // Filled portion
-            val fraction = (zoomLevel - minZoom) / (maxZoom - minZoom)
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
@@ -64,8 +70,8 @@ fun ZoomSlider(
             // Thumb
             Box(
                 modifier = Modifier
-                    .padding(start = (fraction * 300).dp.coerceAtMost(300.dp)) // approximate
-                    .size(32.dp)
+                    .offset(x = thumbOffset)
+                    .size(thumbSize)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primary)
             )
