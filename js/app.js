@@ -8,11 +8,11 @@ const I18N = {
   en: {
     appName: 'PresbyFriend',
     subtitle: 'Read clearly without reading glasses',
-    pasteRead: '📝 Paste & Read',
+    pasteRead: 'Paste & Read',
     pasteDesc: 'Paste text or a URL and read in large, clear font',
-    cameraRead: '📷 Snap & Read',
+    cameraRead: 'Snap & Read',
     cameraDesc: 'Snap a photo of medicine labels, menus, fine print',
-    settings: '⚙️ Settings',
+    settings: 'Settings',
     settingsDesc: 'Adjust font, contrast, theme for comfortable reading',
     footer: 'v0.1 · Data stored locally only',
     readerTitle: 'Reading Mode',
@@ -65,11 +65,11 @@ const I18N = {
   zh: {
     appName: '老花之友',
     subtitle: '不戴眼镜也能看清',
-    pasteRead: '📝 粘贴阅读',
+    pasteRead: '粘贴阅读',
     pasteDesc: '粘贴文字或链接，立即用大字号舒适阅读',
-    cameraRead: '📷 拍照阅读',
+    cameraRead: '拍照阅读',
     cameraDesc: '拍药瓶、菜单、说明书，放大给你看',
-    settings: '⚙️ 阅读设置',
+    settings: '阅读设置',
     settingsDesc: '调节字体、对比度、色温，找到最舒服的阅读方式',
     footer: 'v0.1 · 数据仅保存在本设备',
     readerTitle: '阅读模式',
@@ -183,6 +183,8 @@ document.addEventListener('DOMContentLoaded', () => {
   else if (navigator.language && navigator.language.startsWith('zh')) currentLang = 'zh';
 
   applyTheme(state.theme);
+  document.getElementById('setting-fontsize').value = state.fontSize;
+  document.getElementById('setting-ruler').checked = state.rulerEnabled;
   renderUI();
   registerSW();
 });
@@ -248,19 +250,36 @@ async function fetchUrlContent(url) {
   display.classList.remove('hidden');
   content.textContent = t('loadingUrl');
 
-  try {
-    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-    const resp = await fetch(proxyUrl);
-    const data = await resp.json();
+  const extractText = (html) => {
     const parser = new DOMParser();
-    const doc = parser.parseFromString(data.contents, 'text/html');
+    const doc = parser.parseFromString(html, 'text/html');
     doc.querySelectorAll('script, style, nav, footer, header').forEach(el => el.remove());
-    const text = doc.body.textContent.replace(/\s+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
-    if (text.length > 50) showReaderContent(text);
-    else content.textContent = t('extractFail');
-  } catch (e) {
-    document.getElementById('reader-content').textContent = t('loadFail') + e.message;
+    const text = (doc.body || doc).textContent.replace(/\s+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+    return text;
+  };
+
+  const proxies = [
+    async () => {
+      const resp = await fetch(url);
+      return extractText(await resp.text());
+    },
+    async () => {
+      const resp = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
+      return extractText(await resp.text());
+    },
+    async () => {
+      const resp = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
+      return extractText(await resp.text());
+    },
+  ];
+
+  for (const tryFetch of proxies) {
+    try {
+      const text = await tryFetch();
+      if (text.length > 50) { showReaderContent(text); return; }
+    } catch {}
   }
+  content.textContent = t('extractFail');
 }
 
 function showReaderContent(text) {
@@ -377,19 +396,20 @@ function clearAllData() {
 function calibrateDistance() {
   const result = document.getElementById('distance-result');
   result.classList.remove('hidden');
-  result.textContent = t('calibrating') + ' ' + t('three');
+  const steps = ['three', 'two', 'one'];
   let count = 3;
-  const timer = setInterval(() => {
-    count--;
+  const tick = () => {
     if (count > 0) {
-      result.textContent = t('calibrating') + ' ' + (['', t('three'), t('two'), t('one')][count]);
+      result.textContent = t('calibrating') + ' ' + t(steps[3 - count]);
+      count--;
+      setTimeout(tick, 1000);
     } else {
-      clearInterval(timer);
       state.readingDistance = 35;
       saveSettings();
       result.textContent = t('distanceResult') + `35${t('distanceCm')}`;
     }
-  }, 1000);
+  };
+  tick();
 }
 
 // ═══ Camera + OCR ═══
