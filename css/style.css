@@ -343,7 +343,7 @@ body {
 
 .hidden { display: none !important; }
 
-/* ═══ 拍照 ═══ */
+/* ═══ Magnifier ═══ */
 .camera-area {
   flex: 1;
   display: flex;
@@ -354,101 +354,87 @@ body {
   overflow-y: auto;
 }
 
-.camera-preview {
+.magnifier-container {
   width: 100%;
   max-width: 500px;
-  max-height: 55vh;
   border-radius: var(--radius-md);
+  overflow: hidden;
   background: #000;
-  object-fit: cover;
+}
+
+.camera-preview {
+  width: 100%;
   display: block;
+  transform-origin: center center;
+  transition: transform 0.15s ease-out;
 }
 
-.camera-overlay { text-align: center; }
-
-.camera-hint {
-  font-size: var(--fs-lg);
-  color: var(--text-muted);
-}
-
-.camera-actions {
+.magnifier-controls {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--sp-lg);
-  margin-top: var(--sp-md);
+  gap: var(--sp-md);
+  padding: var(--sp-md) 0;
+  width: 100%;
+  max-width: 500px;
 }
 
-.capture-group {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--sp-sm);
-}
-
-.btn-capture {
-  width: 88px;
-  height: 88px;
-  border-radius: 50%;
-  border: 4px solid var(--accent);
-  background: var(--accent);
-  font-size: 44px;
-  cursor: pointer;
+.zoom-control {
   display: flex;
   align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-  flex-shrink: 0;
-  line-height: 1;
+  gap: var(--sp-md);
+  width: 100%;
 }
 
-.capture-label {
+.zoom-label {
   font-size: var(--fs-lg);
   font-weight: 600;
   color: var(--text);
+  flex-shrink: 0;
 }
 
-.btn-upload {
-  padding: var(--sp-md) var(--sp-lg);
-  font-size: var(--fs-lg);
-  background: var(--bg-card);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+.zoom-control input[type="range"] {
+  flex: 1;
+  height: 8px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--border);
+  border-radius: 4px;
+}
+
+.zoom-control input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--accent);
   cursor: pointer;
 }
 
-.ocr-result {
-  flex: 1;
-  padding: var(--sp-lg);
-  overflow-y: auto;
+.zoom-value {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--accent);
+  min-width: 36px;
+  text-align: right;
+  flex-shrink: 0;
 }
 
-.ocr-actions {
-  display: flex;
-  gap: var(--sp-md);
-  margin-top: var(--sp-lg);
-  justify-content: center;
+.btn-flashlight {
+  padding: var(--sp-md) var(--sp-xl);
+  font-size: var(--fs-lg);
+  background: var(--bg-card);
+  color: var(--text);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-.ocr-progress {
-  text-align: center;
-  padding: var(--sp-lg);
-}
-
-.progress-bar {
-  height: 8px;
-  background: var(--border);
-  border-radius: 4px;
-  margin-top: var(--sp-sm);
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
+.btn-flashlight.active {
   background: var(--accent);
-  transition: width 0.3s;
-  border-radius: 4px;
+  color: white;
+  border-color: var(--accent);
 }
 
 /* ═══ 设置 ═══ */

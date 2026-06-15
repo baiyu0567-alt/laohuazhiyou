@@ -32,16 +32,9 @@ const I18N = {
     lineHeight: 'Line Space',
     letterSpacing: 'Letter Space',
     cameraTitle: 'Snap & Read',
-    cameraHint: 'Point camera at text',
-    capture: 'Capture',
-    upload: '🖼️ Upload',
-    retake: 'Retake',
-    copyText: '📋 Copy Text',
-    ocrLoading: 'Loading OCR engine...',
-    ocrProcessing: 'Processing...',
-    ocrNoText: 'No text detected. Try:\n• Ensure good lighting\n• Keep text level\n• Point camera at text\n\nYou can also paste text in Reading Mode.',
-    ocrFail: 'Recognition failed: ',
-    copied: '✅ Text copied to clipboard',
+    magnifierHint: 'Point camera at small text — slide to zoom',
+    zoom: 'Zoom',
+    flashlight: '🔦 Flashlight',
     settingsTitle: 'Settings',
     distanceCal: '👁️ Reading Distance',
     distanceDesc: 'Hold your phone at your most comfortable reading distance, then calibrate.',
@@ -89,16 +82,9 @@ const I18N = {
     lineHeight: '行距',
     letterSpacing: '字间距',
     cameraTitle: '拍照阅读',
-    cameraHint: '将文字对准镜头',
-    capture: '拍照',
-    upload: '🖼️ 选图片',
-    retake: '重新拍照',
-    copyText: '📋 复制文字',
-    ocrLoading: '加载 OCR 引擎...',
-    ocrProcessing: '识别中...',
-    ocrNoText: '未识别到文字。请尝试:\n• 确保光线充足\n• 文字保持水平\n• 镜头对准文字',
-    ocrFail: '识别失败: ',
-    copied: '✅ 文字已复制到剪贴板',
+    magnifierHint: '将摄像头对准小字 — 滑动变焦放大',
+    zoom: '变焦',
+    flashlight: '🔦 手电筒',
     settingsTitle: '阅读设置',
     distanceCal: '👁️ 阅读距离校准',
     distanceDesc: '把手机放到你平时看书最舒服的距离，然后点校准。',
@@ -172,7 +158,6 @@ const DEFAULTS = {
 // ─── State ───
 let state = loadSettings();
 let cameraStream = null;
-let ocrWorker = null;
 
 // ─── Init ───
 document.addEventListener('DOMContentLoaded', () => {
@@ -412,109 +397,42 @@ function calibrateDistance() {
   tick();
 }
 
-// ═══ Camera + OCR ═══
+// ═══ Camera Magnifier ═══
 
-let cameraReady = false;
+let flashlightOn = false;
 
 async function startCamera() {
-  cameraReady = false;
   try {
     cameraStream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
     });
-    const video = document.getElementById('camera-preview');
-    video.srcObject = cameraStream;
-    await new Promise((resolve) => {
-      video.onloadedmetadata = () => { cameraReady = true; resolve(); };
-    });
+    document.getElementById('camera-preview').srcObject = cameraStream;
   } catch (e) {
-    alert('Camera error: ' + e.message + '\nYou can upload an image instead.');
+    alert('Camera error: ' + e.message);
   }
 }
 
 function stopCamera() {
   if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+  flashlightOn = false;
 }
 
-function capturePhoto() {
+function setZoom(val) {
   const video = document.getElementById('camera-preview');
-  if (!cameraReady || !video.videoWidth || !video.videoHeight) {
-    alert('Camera is still starting up. Please wait a moment and try again.');
-    return;
-  }
-  const canvas = document.createElement('canvas');
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  canvas.getContext('2d').drawImage(video, 0, 0);
-  canvas.toBlob(blob => {
-    if (blob) processImage(blob);
-    else alert('Failed to capture. Try uploading an image instead.');
-  }, 'image/jpeg', 0.95);
+  video.style.transform = `scale(${val})`;
+  document.querySelector('.zoom-value').textContent = `${parseFloat(val).toFixed(1)}x`;
 }
 
-function handleFileUpload(event) {
-  const file = event.target.files[0];
-  if (file) processImage(file);
-}
-
-async function processImage(blob) {
-  const resultDiv = document.getElementById('ocr-result');
-  const textDiv = document.getElementById('ocr-text');
-  const progressDiv = document.getElementById('ocr-progress');
-  const statusSpan = document.getElementById('ocr-status');
-  const bar = document.getElementById('ocr-bar');
-  resultDiv.classList.remove('hidden');
-  progressDiv.classList.remove('hidden');
-  textDiv.textContent = '';
-  renderUI();
-
+async function toggleFlashlight() {
+  if (!cameraStream) return;
+  const track = cameraStream.getVideoTracks()[0];
+  if (!track) return;
   try {
-    if (!ocrWorker) {
-      statusSpan.textContent = t('ocrLoading');
-      await loadTesseract();
-    }
-    statusSpan.textContent = t('ocrProcessing');
-    const result = await Tesseract.recognize(blob, 'eng+chi_sim', {
-      logger: m => {
-        if (m.status === 'recognizing text') {
-          bar.style.width = `${Math.round(m.progress * 100)}%`;
-          statusSpan.textContent = `${Math.round(m.progress * 100)}%`;
-        }
-      }
-    });
-    progressDiv.classList.add('hidden');
-    const text = result.data.text.trim();
-    textDiv.textContent = text || t('ocrNoText');
-  } catch (e) {
-    progressDiv.classList.add('hidden');
-    textDiv.textContent = t('ocrFail') + e.message;
-  }
-  renderUI();
-}
-
-async function loadTesseract() {
-  return new Promise((resolve, reject) => {
-    if (window.Tesseract) { resolve(); return; }
-    const s = document.createElement('script');
-    s.src = 'https://unpkg.com/tesseract.js@5/dist/tesseract.min.js';
-    s.onload = resolve;
-    s.onerror = () => reject(new Error('Failed to load OCR engine'));
-    document.head.appendChild(s);
-  });
-}
-
-function retakePhoto() { document.getElementById('ocr-result').classList.add('hidden'); }
-
-function copyOcrText() {
-  const text = document.getElementById('ocr-text').textContent;
-  if (text && text !== t('ocrNoText')) {
-    navigator.clipboard.writeText(text).then(() => alert(t('copied')))
-    .catch(() => {
-      const ta = document.createElement('textarea');
-      ta.value = text; document.body.appendChild(ta);
-      ta.select(); document.execCommand('copy'); ta.remove();
-      alert(t('copied'));
-    });
+    flashlightOn = !flashlightOn;
+    await track.applyConstraints({ advanced: [{ torch: flashlightOn }] });
+    document.getElementById('flashlight-btn').classList.toggle('active', flashlightOn);
+  } catch {
+    flashlightOn = !flashlightOn;
   }
 }
 
@@ -531,8 +449,7 @@ async function registerSW() {
 Object.assign(window, {
   showView, setTheme, setDefaultTheme, startReading,
   adjustFontSize, adjustLineHeight, adjustLetterSpacing,
-  toggleControls, capturePhoto, handleFileUpload,
-  retakePhoto, copyOcrText, calibrateDistance,
+  toggleControls, calibrateDistance,
   toggleRuler, updateSettingDisplay, clearAllData,
-  stopCamera, toggleLanguage,
+  stopCamera, toggleLanguage, setZoom, toggleFlashlight,
 });

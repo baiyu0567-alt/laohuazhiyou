@@ -103,7 +103,7 @@
   </div>
 </div>
 
-<!-- ═══ Camera View ═══ -->
+<!-- ═══ Magnifier View ═══ -->
 <div id="view-camera" class="view">
   <header class="view-header">
     <button class="btn-back" onclick="stopCamera(); showView('home')" data-i18n="back">← Back</button>
@@ -111,29 +111,16 @@
   </header>
 
   <div id="camera-area" class="camera-area">
-    <video id="camera-preview" autoplay playsinline class="camera-preview"></video>
-    <div class="camera-overlay">
-      <p class="camera-hint" data-i18n="cameraHint">Point camera at text</p>
+    <div class="magnifier-container">
+      <video id="camera-preview" autoplay playsinline class="camera-preview"></video>
     </div>
-    <div class="camera-actions">
-      <div class="capture-group">
-        <button class="btn-capture" onclick="capturePhoto()" aria-label="Capture">📸</button>
-        <span class="capture-label" data-i18n="capture">Capture</span>
+    <div class="magnifier-controls">
+      <div class="zoom-control">
+        <span class="zoom-label" data-i18n="zoom">Zoom</span>
+        <input type="range" id="zoom-slider" min="1" max="4" step="0.1" value="1" oninput="setZoom(this.value)">
+        <span class="zoom-value">1x</span>
       </div>
-      <button class="btn-upload" onclick="document.getElementById('file-input').click()" data-i18n="upload">🖼️ Upload</button>
-      <input type="file" id="file-input" accept="image/*" style="display:none" onchange="handleFileUpload(event)">
-    </div>
-  </div>
-
-  <div id="ocr-result" class="ocr-result hidden">
-    <div id="ocr-text" class="reader-content"></div>
-    <div class="ocr-actions">
-      <button class="btn-primary" onclick="retakePhoto()" data-i18n="retake">Retake</button>
-      <button class="btn-secondary" onclick="copyOcrText()" data-i18n="copyText">📋 Copy Text</button>
-    </div>
-    <div class="ocr-progress hidden" id="ocr-progress">
-      <p><span id="ocr-status"></span></p>
-      <div class="progress-bar"><div id="ocr-bar" class="progress-fill"></div></div>
+      <button id="flashlight-btn" class="btn-flashlight" onclick="toggleFlashlight()" data-i18n="flashlight">🔦 Flashlight</button>
     </div>
   </div>
 </div>
