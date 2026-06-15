@@ -252,10 +252,6 @@ async function fetchUrlContent(url) {
       const resp = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
       return extractText(await resp.text());
     },
-    async () => {
-      const resp = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
-      return extractText(await resp.text());
-    },
   ];
 
   for (const tryFetch of proxies) {
