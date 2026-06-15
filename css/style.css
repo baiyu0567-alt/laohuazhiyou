@@ -349,16 +349,19 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: var(--sp-lg);
+  padding: var(--sp-md);
   gap: var(--sp-md);
+  overflow-y: auto;
 }
 
 .camera-preview {
   width: 100%;
   max-width: 500px;
+  max-height: 55vh;
   border-radius: var(--radius-md);
   background: #000;
+  object-fit: cover;
+  display: block;
 }
 
 .camera-overlay { text-align: center; }
@@ -376,16 +379,19 @@ body {
 }
 
 .btn-capture {
-  width: 72px;
-  height: 72px;
+  width: 80px;
+  height: 80px;
   border-radius: 50%;
   border: 4px solid var(--accent);
-  background: white;
-  font-size: 28px;
+  background: var(--accent);
+  color: white;
+  font-size: 36px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  flex-shrink: 0;
 }
 
 .btn-upload {
