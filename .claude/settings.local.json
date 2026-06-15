@@ -14,7 +14,8 @@
       "WebFetch(domain:laohuazhiyou.vercel.app)",
       "WebSearch",
       "Bash(git tag *)",
-      "WebFetch(domain:stackoverflow.com)"
+      "WebFetch(domain:stackoverflow.com)",
+      "Bash(git *)"
     ]
   }
 }
