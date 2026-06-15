@@ -1,6 +1,6 @@
 package com.presbyfriend.features.subscription
 
-import androidx.activity.compose.LocalActivity
+import android.app.Activity
 import android.app.Application
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -24,7 +24,7 @@ fun PaywallScreen(
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val activity = LocalActivity.current
+    val activity = context as? Activity
     val billingManager = remember { BillingManager(context.applicationContext as Application) }
     val products by billingManager.products.collectAsState()
     val isReady by billingManager.isReady.collectAsState()

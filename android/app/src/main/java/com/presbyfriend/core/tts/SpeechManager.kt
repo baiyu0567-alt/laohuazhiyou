@@ -19,8 +19,12 @@ class SpeechManager(context: Context) : TextToSpeech.OnInitListener {
                 }
             }
 
+            override fun onStart(utteranceId: String?) {}
+
             @Suppress("DEPRECATION")
             override fun onError(utteranceId: String?) {}
+
+            override fun onError(utteranceId: String?, errorCode: Int) {}
         })
     }
 

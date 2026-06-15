@@ -53,26 +53,25 @@ class MagnifierViewModel(application: Application) : AndroidViewModel(applicatio
                 it.setSurfaceProvider(previewView.surfaceProvider)
             }
 
-            imageAnalysis = ImageAnalysis.Builder()
+            val analysis = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
-                .also { analysis ->
-                    analysis.setAnalyzer(analyzerExecutor) { imageProxy ->
+                .also { a ->
+                    a.setAnalyzer(analyzerExecutor) { imageProxy ->
                         recognizeText(imageProxy)
                     }
                 }
+            imageAnalysis = analysis
 
             val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
             cameraProvider.unbindAll()
             camera = cameraProvider.bindToLifecycle(
-                lifecycleOwner = ProcessLifecycleOwner.get(),
+                ProcessLifecycleOwner.get(),
                 cameraSelector,
                 preview,
-                imageAnalysis
-            ).also { boundCamera ->
-                camera = boundCamera
-            }
+                analysis
+            )
         }, ContextCompat.getMainExecutor(ctx))
     }
 
