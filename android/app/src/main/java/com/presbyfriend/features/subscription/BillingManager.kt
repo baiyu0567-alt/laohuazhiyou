@@ -85,7 +85,7 @@ class BillingManager(application: Application) {
                 .setProductType(BillingClient.ProductType.SUBS)
                 .build()
         ) { _, purchases ->
-            val isPro = purchases.any { productIds.contains(it.products.firstOrNull()) }
+            val isPro = purchases?.any { productIds.contains(it.products.firstOrNull()) } ?: false
             if (isPro) {
                 scope.launch { store.setIsPro(true) }
             }

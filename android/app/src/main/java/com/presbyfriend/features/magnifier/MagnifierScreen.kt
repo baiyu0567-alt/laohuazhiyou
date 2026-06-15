@@ -37,8 +37,7 @@ fun MagnifierScreen(
     }
 
     LaunchedEffect(Unit) {
-        viewModel.checkPermission()
-        if (!hasPermission) {
+        if (!viewModel.hasPermission.value) {
             permissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
