@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PresbyFriend</string>
+    <string name="app_subtitle">Lesehilfe bei Alterssichtigkeit</string>
+    <string name="magnifier_tab">Lupe</string>
+    <string name="settings_tab">Einstellungen</string>
+    <string name="zoom_label">Zoom</string>
+    <string name="flashlight">Taschenlampe</string>
+    <string name="tap_text_to_read">Text zum Lesen antippen</string>
+    <string name="reading_mode">Lesemodus</string>
+    <string name="font_size">Schriftgröße</string>
+    <string name="theme_label">Thema</string>
+    <string name="theme_white">Weiß</string>
+    <string name="theme_sepia">Sepia</string>
+    <string name="theme_dark">Dunkel</string>
+    <string name="theme_yellow">Gelb</string>
+    <string name="line_height">Zeilenhöhe</string>
+    <string name="letter_spacing">Buchstabenabstand</string>
+    <string name="read_aloud">Vorlesen</string>
+    <string name="stop_reading">Stopp</string>
+    <string name="reading_ruler">Lesezeile</string>
+    <string name="ruler_description">Hervorhebung der Zeile unter Ihrem Finger beim Lesen</string>
+    <string name="upgrade_pro">Pro upgraden</string>
+    <string name="restore_purchases">Käufe wiederherstellen</string>
+</resources>

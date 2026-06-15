@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PresbyFriend</string>
+    <string name="app_subtitle">Asistente de lectura para presbicia</string>
+    <string name="magnifier_tab">Lupa</string>
+    <string name="settings_tab">Ajustes</string>
+    <string name="zoom_label">Zoom</string>
+    <string name="flashlight">Linterna</string>
+    <string name="tap_text_to_read">Toca el texto para leer</string>
+    <string name="reading_mode">Modo lectura</string>
+    <string name="font_size">Tamaño de fuente</string>
+    <string name="theme_label">Tema</string>
+    <string name="theme_white">Blanco</string>
+    <string name="theme_sepia">Sepia</string>
+    <string name="theme_dark">Oscuro</string>
+    <string name="theme_yellow">Amarillo</string>
+    <string name="line_height">Interlineado</string>
+    <string name="letter_spacing">Espaciado entre letras</string>
+    <string name="read_aloud">Leer en voz alta</string>
+    <string name="stop_reading">Detener</string>
+    <string name="reading_ruler">Regla de lectura</string>
+    <string name="ruler_description">Resalta la línea bajo tu dedo mientras lees</string>
+    <string name="upgrade_pro">Actualizar a Pro</string>
+    <string name="restore_purchases">Restaurar compras</string>
+</resources>

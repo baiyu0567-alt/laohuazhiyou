@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PresbyFriend</string>
+    <string name="app_subtitle">Reading Assistant for Presbyopia</string>
+
+    <!-- Tabs -->
+    <string name="magnifier_tab">Magnifier</string>
+    <string name="settings_tab">Settings</string>
+
+    <!-- Magnifier -->
+    <string name="zoom_label">Zoom</string>
+    <string name="flashlight">Flashlight</string>
+    <string name="tap_text_to_read">Tap text to read</string>
+    <string name="camera_error">Camera unavailable</string>
+    <string name="camera_permission_required">Camera permission is required for the magnifier</string>
+
+    <!-- Reader -->
+    <string name="reading_mode">Reading Mode</string>
+    <string name="font_size">Font Size</string>
+    <string name="theme_label">Theme</string>
+    <string name="theme_white">White</string>
+    <string name="theme_sepia">Sepia</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_yellow">Yellow</string>
+    <string name="line_height">Line Height</string>
+    <string name="letter_spacing">Letter Spacing</string>
+    <string name="read_aloud">Read Aloud</string>
+    <string name="stop_reading">Stop Reading</string>
+    <string name="reading_ruler">Reading Ruler</string>
+    <string name="ruler_description">Highlight the line under your finger while reading</string>
+    <string name="default_font">Default Font Size</string>
+    <string name="default_theme">Default Theme</string>
+    <string name="show_controls">Show Controls</string>
+
+    <!-- Settings -->
+    <string name="language_label">Language</string>
+    <string name="data_management">Data Management</string>
+    <string name="reset_settings">Reset Settings</string>
+    <string name="reset_confirm">This will reset all settings to defaults. Continue?</string>
+    <string name="version_footer">PresbyFriend v1.0 — Made for presbyopia</string>
+
+    <!-- Subscription -->
+    <string name="pro_feature">Pro Feature</string>
+    <string name="free_limit_reached">You have reached the 10 free reads per day limit. Upgrade to Pro for unlimited access.</string>
+    <string name="upgrade_pro">Upgrade to Pro</string>
+    <string name="pro_monthly">PresbyFriend Pro Monthly</string>
+    <string name="pro_monthly_desc">Unlimited reading, all themes, premium support</string>
+    <string name="pro_yearly">PresbyFriend Pro Yearly</string>
+    <string name="pro_yearly_desc">Best value — save 40% with annual plan</string>
+    <string name="restore_purchases">Restore Purchases</string>
+    <string name="close">Close</string>
+
+    <!-- URL extraction -->
+    <string name="loading_url">Loading content…</string>
+    <string name="url_extract_fail">Could not extract text from this URL</string>
+    <string name="no_shared_content">No shared content found</string>
+
+    <!-- Accessibility -->
+    <string name="quick_tile_label">PresbyFriend Magnifier</string>
+    <string name="accessibility_description">PresbyFriend helps people with presbyopia read small text by magnifying and enhancing text on screen</string>
+    <string name="accessibility_action">Launch magnifier</string>
+</resources>
