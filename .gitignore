@@ -40,3 +40,16 @@ fastlane/test_output
 *.p12
 *.mobileprovision
 *.provisionprofile
+
+# Android
+.gradle/
+.idea/
+*.iml
+local.properties
+build/
+*/build/
+app/release/
+*.apk
+*.aab
+*.jks
+*.keystore
