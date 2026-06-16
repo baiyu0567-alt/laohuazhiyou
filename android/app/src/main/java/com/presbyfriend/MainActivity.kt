@@ -11,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -22,13 +23,15 @@ import com.presbyfriend.features.reader.ReaderScreen
 import com.presbyfriend.features.settings.SettingsScreen
 import com.presbyfriend.features.subscription.PaywallScreen
 import com.presbyfriend.core.url.UrlExtractor
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import java.net.URLEncoder
 import java.net.URLDecoder
 
 class MainActivity : ComponentActivity() {
 
-    private var pendingSharedText: String? = null
-    private var pendingSharedUrl: String? = null
+    private val _sharedText = MutableStateFlow<String?>(null)
+    private val _sharedUrl = MutableStateFlow<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,15 +39,30 @@ class MainActivity : ComponentActivity() {
 
         handleIntent(intent)
 
+        val isMagnifierLaunch = intent?.getBooleanExtra("launch_magnifier", false) == true
+        val hasSharedContent = _sharedText.value != null || _sharedUrl.value != null
+
+        val startDestination = when {
+            isMagnifierLaunch -> "magnifier"
+            hasSharedContent -> "reader_shared"
+            else -> "home"
+        }
+
         setContent {
             PresbyFriendTheme {
                 val navController = rememberNavController()
                 val scope = rememberCoroutineScope()
 
-                val startDestination = if (intent?.getBooleanExtra("launch_magnifier", false) == true) {
-                    "magnifier"
-                } else {
-                    "home"
+                // Watch for shared urls arriving via onNewIntent
+                val sharedUrl by _sharedUrl.collectAsStateWithLifecycle()
+                LaunchedEffect(sharedUrl) {
+                    sharedUrl?.let { url ->
+                        val result = UrlExtractor.extract(url)
+                        result.onSuccess { text ->
+                            navController.navigate("reader_content/${URLEncoder.encode(text, "UTF-8")}")
+                        }
+                        _sharedUrl.value = null
+                    }
                 }
 
                 NavHost(navController = navController, startDestination = startDestination) {
@@ -58,18 +76,35 @@ class MainActivity : ComponentActivity() {
                     composable("magnifier") {
                         MagnifierScreen(
                             onTextDetected = { text ->
-                                navController.navigate("reader/${java.net.URLEncoder.encode(text, "UTF-8")}")
+                                navController.navigate("reader_content/${URLEncoder.encode(text, "UTF-8")}")
                             },
                             onNavigateBack = { navController.popBackStack() }
                         )
                     }
 
+                    // Entry point for shared text — pops itself off back stack after redirecting
+                    composable("reader_shared") {
+                        LaunchedEffect(Unit) {
+                            val text = _sharedText.value
+                            _sharedText.value = null
+                            if (!text.isNullOrBlank()) {
+                                navController.navigate("reader_content/${URLEncoder.encode(text, "UTF-8")}") {
+                                    popUpTo("reader_shared") { inclusive = true }
+                                }
+                            } else {
+                                navController.navigate("home") {
+                                    popUpTo("reader_shared") { inclusive = true }
+                                }
+                            }
+                        }
+                    }
+
                     composable(
-                        route = "reader/{text}",
+                        route = "reader_content/{text}",
                         arguments = listOf(navArgument("text") { type = NavType.StringType })
                     ) { backStackEntry ->
                         val text = backStackEntry.arguments?.getString("text")?.let {
-                            java.net.URLDecoder.decode(it, "UTF-8")
+                            URLDecoder.decode(it, "UTF-8")
                         } ?: ""
                         ReaderScreen(
                             initialText = text,
@@ -89,23 +124,6 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                 }
-
-                // Process shared content
-                LaunchedEffect(Unit) {
-                    pendingSharedText?.let { text ->
-                        navController.navigate("reader/${java.net.URLEncoder.encode(text, "UTF-8")}")
-                        pendingSharedText = null
-                    }
-                    pendingSharedUrl?.let { url ->
-                        scope.launch {
-                            val result = UrlExtractor.extract(url)
-                            result.onSuccess { text ->
-                                navController.navigate("reader/${java.net.URLEncoder.encode(text, "UTF-8")}")
-                            }
-                            pendingSharedUrl = null
-                        }
-                    }
-                }
             }
         }
     }
@@ -118,21 +136,16 @@ class MainActivity : ComponentActivity() {
     private fun handleIntent(intent: Intent) {
         when (intent.action) {
             Intent.ACTION_SEND -> {
-                val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
-                if (sharedText.startsWith("http://") || sharedText.startsWith("https://")) {
-                    pendingSharedUrl = sharedText
+                val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
+                if (text.startsWith("http://") || text.startsWith("https://")) {
+                    _sharedUrl.value = text
                 } else {
-                    pendingSharedText = sharedText
+                    _sharedText.value = text
                 }
             }
             Intent.ACTION_PROCESS_TEXT -> {
                 intent.getStringExtra(Intent.EXTRA_PROCESS_TEXT)?.let { text ->
-                    pendingSharedText = text
-                }
-            }
-            else -> {
-                intent.getStringExtra("text")?.let { text ->
-                    pendingSharedText = text
+                    _sharedText.value = text
                 }
             }
         }
