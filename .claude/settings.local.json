@@ -27,7 +27,8 @@
       "Bash(wmic memorychip *)",
       "Bash(wmic cpu *)",
       "Bash(/c/Users/Hi/AppData/Local/Android/Sdk/platform-tools/adb devices *)",
-      "Bash(/c/Users/Hi/AppData/Local/Android/Sdk/platform-tools/adb install *)"
+      "Bash(/c/Users/Hi/AppData/Local/Android/Sdk/platform-tools/adb install *)",
+      "Bash(/c/Users/Hi/AppData/Local/Android/Sdk/platform-tools/adb logcat *)"
     ]
   }
 }

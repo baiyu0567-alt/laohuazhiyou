@@ -11,7 +11,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -24,7 +23,6 @@ import com.presbyfriend.features.settings.SettingsScreen
 import com.presbyfriend.features.subscription.PaywallScreen
 import com.presbyfriend.core.url.UrlExtractor
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.launch
 import java.net.URLEncoder
 import java.net.URLDecoder
 
@@ -39,27 +37,39 @@ class MainActivity : ComponentActivity() {
 
         handleIntent(intent)
 
-        val isMagnifierLaunch = intent?.getBooleanExtra("launch_magnifier", false) == true
-        val hasSharedContent = _sharedText.value != null || _sharedUrl.value != null
-
-        val startDestination = when {
-            isMagnifierLaunch -> "magnifier"
-            hasSharedContent -> "reader_shared"
-            else -> "home"
-        }
-
         setContent {
             PresbyFriendTheme {
                 val navController = rememberNavController()
                 val scope = rememberCoroutineScope()
 
-                // Watch for shared urls arriving via onNewIntent
-                val sharedUrl by _sharedUrl.collectAsStateWithLifecycle()
+                val startDestination = if (intent?.getBooleanExtra("launch_magnifier", false) == true) {
+                    "magnifier"
+                } else {
+                    "home"
+                }
+
+                // Watch for shared text — triggers on initial launch AND onNewIntent
+                val sharedText by _sharedText.collectAsState()
+                LaunchedEffect(sharedText) {
+                    sharedText?.let { raw ->
+                        if (raw.isNotBlank()) {
+                            navController.navigate("reader_content/${URLEncoder.encode(raw, "UTF-8")}") {
+                                popUpTo("home")
+                            }
+                        }
+                        _sharedText.value = null
+                    }
+                }
+
+                // Watch for shared URLs
+                val sharedUrl by _sharedUrl.collectAsState()
                 LaunchedEffect(sharedUrl) {
-                    sharedUrl?.let { url ->
-                        val result = UrlExtractor.extract(url)
+                    sharedUrl?.let { raw ->
+                        val result = UrlExtractor.extract(raw)
                         result.onSuccess { text ->
-                            navController.navigate("reader_content/${URLEncoder.encode(text, "UTF-8")}")
+                            navController.navigate("reader_content/${URLEncoder.encode(text, "UTF-8")}") {
+                                popUpTo("home")
+                            }
                         }
                         _sharedUrl.value = null
                     }
@@ -82,23 +92,6 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    // Entry point for shared text — pops itself off back stack after redirecting
-                    composable("reader_shared") {
-                        LaunchedEffect(Unit) {
-                            val text = _sharedText.value
-                            _sharedText.value = null
-                            if (!text.isNullOrBlank()) {
-                                navController.navigate("reader_content/${URLEncoder.encode(text, "UTF-8")}") {
-                                    popUpTo("reader_shared") { inclusive = true }
-                                }
-                            } else {
-                                navController.navigate("home") {
-                                    popUpTo("reader_shared") { inclusive = true }
-                                }
-                            }
-                        }
-                    }
-
                     composable(
                         route = "reader_content/{text}",
                         arguments = listOf(navArgument("text") { type = NavType.StringType })
@@ -108,7 +101,9 @@ class MainActivity : ComponentActivity() {
                         } ?: ""
                         ReaderScreen(
                             initialText = text,
-                            onNavigateBack = { navController.popBackStack() }
+                            onNavigateBack = {
+                                navController.popBackStack("home", inclusive = false)
+                            }
                         )
                     }
 
