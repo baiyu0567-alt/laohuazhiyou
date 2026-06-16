@@ -52,14 +52,17 @@ fun ReaderScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.toggleSpeaking(application) }) {
+                    TextButton(onClick = { viewModel.toggleSpeaking(application) }) {
                         Text(
-                            if (isSpeaking) stringResource(L10n.stopReading)
-                            else stringResource(L10n.readAloud)
+                            if (isSpeaking) "Stop" else "Read",
+                            style = MaterialTheme.typography.labelMedium
                         )
                     }
-                    IconButton(onClick = { viewModel.toggleControls() }) {
-                        Text(stringResource(L10n.showControls))
+                    TextButton(onClick = { viewModel.toggleControls() }) {
+                        Text(
+                            "Aa",
+                            style = MaterialTheme.typography.labelMedium
+                        )
                     }
                 }
             )

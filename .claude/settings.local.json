@@ -22,7 +22,12 @@
       "Bash(cmd.exe //c \"dir /s /b C:\\\\studio64.exe 2>nul\")",
       "Bash(cmd.exe //c \"where studio64.exe 2>nul\")",
       "Bash(export JAVA_HOME=\"/c/Users/Hi/.jdks/jbr-17.0.14\")",
-      "Bash(./gradlew assembleDebug --no-daemon)"
+      "Bash(./gradlew assembleDebug --no-daemon)",
+      "Bash(systeminfo)",
+      "Bash(wmic memorychip *)",
+      "Bash(wmic cpu *)",
+      "Bash(/c/Users/Hi/AppData/Local/Android/Sdk/platform-tools/adb devices *)",
+      "Bash(/c/Users/Hi/AppData/Local/Android/Sdk/platform-tools/adb install *)"
     ]
   }
 }
