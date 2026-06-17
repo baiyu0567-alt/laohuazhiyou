@@ -53,4 +53,6 @@ object L10n {
     @StringRes val quickTileLabel = R.string.quick_tile_label
     @StringRes val accessibilityDescription = R.string.accessibility_description
     @StringRes val accessibilityAction = R.string.accessibility_action
+    @StringRes val enableAccessibility = R.string.enable_accessibility
+    @StringRes val accessibilityHint = R.string.accessibility_hint
 }

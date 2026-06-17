@@ -12,10 +12,13 @@ import kotlinx.coroutines.launch
 class ReaderViewModel(application: Application) : AndroidViewModel(application) {
 
     private val store = (application as PresbyFriendApp).settingsStore
-    private var speechManager: SpeechManager? = null
+    private val speechManager: SpeechManager = SpeechManager(application)
 
     private val _text = MutableStateFlow("")
     val text: StateFlow<String> = _text.asStateFlow()
+
+    private val _paragraphs = MutableStateFlow<List<String>>(emptyList())
+    val paragraphs: StateFlow<List<String>> = _paragraphs.asStateFlow()
 
     private val _fontSize = MutableStateFlow(40f)
     val fontSize: StateFlow<Float> = _fontSize.asStateFlow()
@@ -66,6 +69,12 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setText(content: String) {
         _text.value = content
+        _paragraphs.value = emptyList()
+    }
+
+    fun setParagraphs(paragraphs: List<String>) {
+        _paragraphs.value = paragraphs
+        _text.value = paragraphs.joinToString("\n\n")
     }
 
     fun adjustFontSize(by: Float) {
@@ -100,25 +109,22 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         _showControls.value = !_showControls.value
     }
 
-    fun toggleSpeaking(app: Application) {
+    fun toggleSpeaking() {
         if (_isSpeaking.value) {
-            speechManager?.stop()
+            speechManager.stop()
             _isSpeaking.value = false
         } else {
-            if (speechManager == null) {
-                speechManager = SpeechManager(app)
-            }
-            speechManager?.speak(
+            _isSpeaking.value = true
+            speechManager.speak(
                 text = _text.value,
                 language = _language.value,
                 onFinish = { _isSpeaking.value = false }
             )
-            _isSpeaking.value = true
         }
     }
 
     override fun onCleared() {
         super.onCleared()
-        speechManager?.shutdown()
+        speechManager.shutdown()
     }
 }

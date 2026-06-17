@@ -16,7 +16,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.presbyfriend.R
 import com.presbyfriend.core.i18n.L10n
+import com.presbyfriend.core.theme.ReadingTheme
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,6 +32,9 @@ fun PaywallScreen(
     val products by billingManager.products.collectAsState()
     val isReady by billingManager.isReady.collectAsState()
     var purchasing by remember { mutableStateOf(false) }
+    var restoring by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         billingManager.startConnection()
@@ -44,7 +50,8 @@ fun PaywallScreen(
                     }
                 }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -71,7 +78,7 @@ fun PaywallScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            if (isReady) {
+            if (isReady && products.isNotEmpty()) {
                 products.forEach { product ->
                     Card(
                         onClick = {
@@ -90,7 +97,10 @@ fun PaywallScreen(
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
-                        enabled = !purchasing
+                        enabled = !purchasing,
+                        colors = CardDefaults.cardColors(
+                            containerColor = ReadingTheme.SEPIA.backgroundColor
+                        )
                     ) {
                         Row(
                             modifier = Modifier.padding(16.dp),
@@ -99,12 +109,13 @@ fun PaywallScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = product.name,
-                                    style = MaterialTheme.typography.titleMedium
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = ReadingTheme.SEPIA.textColor
                                 )
                                 Text(
                                     text = product.description,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = ReadingTheme.SEPIA.textColor.copy(alpha = 0.7f)
                                 )
                             }
                             Text(
@@ -114,7 +125,49 @@ fun PaywallScreen(
                                     ?.pricingPhaseList
                                     ?.firstOrNull()
                                     ?.formattedPrice ?: "",
-                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                color = ReadingTheme.SEPIA.accentColor
+                            )
+                        }
+                    }
+                }
+            } else if (isReady) {
+                // Billing connected but no products in Play Console yet — show hardcoded info
+                val fallbackPlans = listOf(
+                    Triple(stringResource(R.string.pro_monthly), stringResource(R.string.pro_monthly_desc), stringResource(R.string.pro_monthly_price)),
+                    Triple(stringResource(R.string.pro_yearly), stringResource(R.string.pro_yearly_desc), stringResource(R.string.pro_yearly_price))
+                )
+                fallbackPlans.forEach { (name, desc, price) ->
+                    Card(
+                        onClick = {
+                            scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.play_store_coming)) }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = ReadingTheme.SEPIA.backgroundColor
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = name,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = ReadingTheme.SEPIA.textColor
+                                )
+                                Text(
+                                    text = desc,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = ReadingTheme.SEPIA.textColor.copy(alpha = 0.7f)
+                                )
+                            }
+                            Text(
+                                text = price,
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                color = ReadingTheme.SEPIA.accentColor
                             )
                         }
                     }
@@ -123,12 +176,30 @@ fun PaywallScreen(
                 CircularProgressIndicator()
             }
 
-            TextButton(onClick = {
-                billingManager.restorePurchases { success ->
-                    if (success) onNavigateBack()
+            OutlinedButton(
+                onClick = {
+                    if (!restoring) {
+                        restoring = true
+                        billingManager.restorePurchases { success ->
+                            restoring = false
+                            val msg = if (success) {
+                                context.getString(R.string.restore_success)
+                            } else {
+                                context.getString(R.string.restore_no_purchases)
+                            }
+                            scope.launch { snackbarHostState.showSnackbar(msg) }
+                            if (success) onNavigateBack()
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                enabled = !restoring
+            ) {
+                if (restoring) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                } else {
+                    Text(stringResource(L10n.restorePurchases))
                 }
-            }) {
-                Text(stringResource(L10n.restorePurchases))
             }
         }
     }

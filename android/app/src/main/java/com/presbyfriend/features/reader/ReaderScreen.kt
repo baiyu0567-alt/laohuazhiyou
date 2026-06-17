@@ -1,6 +1,5 @@
 package com.presbyfriend.features.reader
 
-import android.app.Application
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -21,19 +20,25 @@ import com.presbyfriend.core.theme.ReadingTheme
 @Composable
 fun ReaderScreen(
     initialText: String = "",
+    paragraphs: List<String>? = null,
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val application = context.applicationContext as Application
-    val viewModel = remember { ReaderViewModel(application) }
+    val viewModel = remember { ReaderViewModel(context.applicationContext as android.app.Application) }
 
     LaunchedEffect(initialText) {
-        if (initialText.isNotBlank()) {
+        if (initialText.isNotBlank() && paragraphs.isNullOrEmpty()) {
             viewModel.setText(initialText)
+        }
+    }
+    LaunchedEffect(paragraphs) {
+        if (!paragraphs.isNullOrEmpty()) {
+            viewModel.setParagraphs(paragraphs)
         }
     }
 
     val text by viewModel.text.collectAsState()
+    val vmParagraphs by viewModel.paragraphs.collectAsState()
     val fontSize by viewModel.fontSize.collectAsState()
     val theme by viewModel.theme.collectAsState()
     val lineHeight by viewModel.lineHeight.collectAsState()
@@ -52,7 +57,7 @@ fun ReaderScreen(
                     }
                 },
                 actions = {
-                    TextButton(onClick = { viewModel.toggleSpeaking(application) }) {
+                    TextButton(onClick = { viewModel.toggleSpeaking() }) {
                         Text(
                             if (isSpeaking) "Stop" else "Read",
                             style = MaterialTheme.typography.labelMedium
@@ -77,16 +82,37 @@ fun ReaderScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 24.dp, vertical = 16.dp)
             ) {
-                Text(
-                    text = text.ifBlank { stringResource(L10n.tapTextToRead) },
-                    style = TextStyle(
-                        fontSize = fontSize.sp,
-                        lineHeight = (fontSize * lineHeight).sp,
-                        letterSpacing = letterSpacing.sp,
-                        color = theme.textColor,
-                        fontFamily = FontFamily.Serif
+                if (vmParagraphs.isNotEmpty()) {
+                    vmParagraphs.forEachIndexed { index, paragraph ->
+                        Text(
+                            text = paragraph,
+                            style = TextStyle(
+                                fontSize = fontSize.sp,
+                                lineHeight = (fontSize * lineHeight).sp,
+                                letterSpacing = letterSpacing.sp,
+                                color = theme.textColor,
+                                fontFamily = FontFamily.Serif
+                            )
+                        )
+                        if (index < vmParagraphs.lastIndex) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 12.dp),
+                                color = theme.textColor.copy(alpha = 0.2f)
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        text = text.ifBlank { stringResource(L10n.tapTextToRead) },
+                        style = TextStyle(
+                            fontSize = fontSize.sp,
+                            lineHeight = (fontSize * lineHeight).sp,
+                            letterSpacing = letterSpacing.sp,
+                            color = theme.textColor,
+                            fontFamily = FontFamily.Serif
+                        )
                     )
-                )
+                }
             }
 
             // Reading ruler overlay

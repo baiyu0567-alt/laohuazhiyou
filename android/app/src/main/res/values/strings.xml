@@ -45,10 +45,15 @@
     <string name="upgrade_pro">Upgrade to Pro</string>
     <string name="pro_monthly">PresbyFriend Pro Monthly</string>
     <string name="pro_monthly_desc">Unlimited reading, all themes, premium support</string>
+    <string name="pro_monthly_price">$2.99/mo</string>
     <string name="pro_yearly">PresbyFriend Pro Yearly</string>
     <string name="pro_yearly_desc">Best value — save 40% with annual plan</string>
+    <string name="pro_yearly_price">$19.99/yr</string>
     <string name="restore_purchases">Restore Purchases</string>
+    <string name="restore_success">Purchases restored. Welcome back to Pro!</string>
+    <string name="restore_no_purchases">No previous purchases found.</string>
     <string name="close">Close</string>
+    <string name="play_store_coming">Purchase will be available on Google Play. Stay tuned!</string>
 
     <!-- URL extraction -->
     <string name="loading_url">Loading content…</string>
@@ -59,4 +64,11 @@
     <string name="quick_tile_label">PresbyFriend Magnifier</string>
     <string name="accessibility_description">PresbyFriend helps people with presbyopia read small text by magnifying and enhancing text on screen</string>
     <string name="accessibility_action">Launch magnifier</string>
+    <string name="enable_accessibility">Enable Floating Button</string>
+    <string name="accessibility_hint">Read text in any app with a floating magnifier</string>
+    <string name="clipboard_empty_hint">Copy text first, then tap here</string>
+    <string name="no_text_found">No text found on this screen</string>
+    <string name="daily_limit_reached">Daily limit reached. Upgrade to Pro for unlimited use.</string>
+    <string name="accessibility_hint_title">How to read text</string>
+    <string name="accessibility_hint_body">Select and copy the text you want to read in any app, then tap the floating button 🔍 again.\n\n1. Long-press to select text\n2. Tap \'Copy\'\n3. Tap the blue 🔍 button</string>
 </resources>

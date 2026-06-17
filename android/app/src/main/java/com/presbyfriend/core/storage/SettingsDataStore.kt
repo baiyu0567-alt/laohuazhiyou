@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import com.presbyfriend.core.theme.ReadingTheme
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -61,23 +62,25 @@ class SettingsDataStore(private val context: Context) {
         context.dataStore.edit { it[KEY_IS_PRO] = value }
     }
 
-    suspend fun incrementUse(): Boolean {
-        var canUse = true
+    suspend fun canUseToday(): Boolean {
+        val prefs = context.dataStore.data.first()
+        if (prefs[KEY_IS_PRO] ?: false) return true
+        val today = System.currentTimeMillis()
+        val lastDate = prefs[KEY_LAST_USE_DATE] ?: 0L
+        if (lastDate / 86400000 != today / 86400000) return true
+        return (prefs[KEY_DAILY_USE_COUNT] ?: 0) < 10
+    }
+
+    suspend fun recordUse() {
         context.dataStore.edit { prefs ->
             val today = System.currentTimeMillis()
             val lastDate = prefs[KEY_LAST_USE_DATE] ?: 0L
             val lastDay = lastDate / 86400000
             val todayDay = today / 86400000
-
             val count = if (lastDay != todayDay) 1 else (prefs[KEY_DAILY_USE_COUNT] ?: 0) + 1
-
             prefs[KEY_DAILY_USE_COUNT] = count
             prefs[KEY_LAST_USE_DATE] = today
-
-            val isPro = prefs[KEY_IS_PRO] ?: false
-            canUse = isPro || count <= 10
         }
-        return canUse
     }
 
     suspend fun reset() {

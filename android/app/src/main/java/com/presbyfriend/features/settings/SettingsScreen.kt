@@ -141,20 +141,30 @@ fun SettingsScreen(
             // Pro upgrade
             Button(
                 onClick = onNavigateToPaywall,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ReadingTheme.SEPIA.backgroundColor,
+                    contentColor = ReadingTheme.SEPIA.textColor
+                )
             ) {
-                Text("👑  ${stringResource(L10n.upgradePro)}")
+                Text(
+                    "${stringResource(L10n.upgradePro)}",
+                    style = MaterialTheme.typography.titleMedium
+                )
             }
 
             // Reset
             OutlinedButton(
                 onClick = { showResetDialog = true },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().height(56.dp),
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = MaterialTheme.colorScheme.error
                 )
             ) {
-                Text(stringResource(L10n.resetSettings))
+                Text(
+                    stringResource(L10n.resetSettings),
+                    style = MaterialTheme.typography.titleMedium
+                )
             }
 
             // Version
