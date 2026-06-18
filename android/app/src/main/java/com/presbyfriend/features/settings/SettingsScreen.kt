@@ -1,5 +1,6 @@
 package com.presbyfriend.features.settings
 
+import android.app.Activity
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -132,6 +133,8 @@ fun SettingsScreen(
                             onClick = {
                                 viewModel.setLanguage(code)
                                 languageExpanded = false
+                                L10n.applyLocale(context, code)
+                                (context as? Activity)?.recreate()
                             }
                         )
                     }

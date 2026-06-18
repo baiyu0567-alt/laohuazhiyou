@@ -1,13 +1,25 @@
 package com.presbyfriend.core.i18n
 
+import android.content.Context
+import android.content.res.Configuration
 import androidx.annotation.StringRes
 import com.presbyfriend.R
+import java.util.Locale
 
 /**
  * Type-safe string resource references.
  * Usage: stringResource(L10n.appName) in Compose, or getString(L10n.appName) in Context.
  */
 object L10n {
+
+    fun applyLocale(context: Context, languageCode: String) {
+        val locale = Locale(languageCode)
+        Locale.setDefault(locale)
+        val config = Configuration(context.resources.configuration)
+        config.setLocale(locale)
+        @Suppress("DEPRECATION")
+        context.resources.updateConfiguration(config, context.resources.displayMetrics)
+    }
     @StringRes val appName = R.string.app_name
     @StringRes val appSubtitle = R.string.app_subtitle
     @StringRes val magnifierTab = R.string.magnifier_tab

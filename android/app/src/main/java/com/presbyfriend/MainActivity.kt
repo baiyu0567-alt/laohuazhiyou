@@ -25,6 +25,8 @@ import com.presbyfriend.features.settings.SettingsScreen
 import com.presbyfriend.features.subscription.PaywallScreen
 import com.presbyfriend.core.url.UrlExtractor
 import com.presbyfriend.core.theme.ReadingTheme
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.MutableStateFlow
 import android.util.Base64
 import org.json.JSONArray
@@ -48,6 +50,13 @@ class MainActivity : ComponentActivity() {
         // Service sent us with empty EXTRA_TEXT → need to read clipboard from foreground
         val needsClipboard = !launchMagnifierFlag && initialText == null &&
             intent?.action == Intent.ACTION_SEND
+        // Apply saved locale before rendering
+        val lang = runBlocking {
+            val store = (application as PresbyFriendApp).settingsStore
+            store.language.first()
+        }
+        if (lang != "en") L10n.applyLocale(this, lang)
+
         val activity = this
 
         setContent {
