@@ -11,7 +11,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,7 +34,7 @@ class MagnifierViewModel(application: Application) : AndroidViewModel(applicatio
     private var camera: androidx.camera.core.Camera? = null
     private var imageAnalysis: ImageAnalysis? = null
     private val analyzerExecutor = Executors.newSingleThreadExecutor()
-    private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+    private val recognizer = TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
 
     fun checkPermission() {
         val ctx = getApplication<Application>()
