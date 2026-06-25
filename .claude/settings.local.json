@@ -1,4 +1,14 @@
 {
+  "env": {
+    "HTTP_PROXY": "http://127.0.0.1:17897",
+    "HTTPS_PROXY": "http://127.0.0.1:17897",
+    "http_proxy": "http://127.0.0.1:17897",
+    "https_proxy": "http://127.0.0.1:17897",
+    "JAVA_TOOL_OPTIONS": "-Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=17897 -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=17897",
+    "ANDROID_HOME": "/Users/mac/Library/Android/sdk",
+    "ANDROID_SDK_ROOT": "/Users/mac/Library/Android/sdk",
+    "JAVA_HOME": "/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+  },
   "permissions": {
     "allow": [
       "Bash(git clone *)",
@@ -28,7 +38,28 @@
       "Bash(wmic cpu *)",
       "Bash(/c/Users/Hi/AppData/Local/Android/Sdk/platform-tools/adb devices *)",
       "Bash(/c/Users/Hi/AppData/Local/Android/Sdk/platform-tools/adb install *)",
-      "Bash(/c/Users/Hi/AppData/Local/Android/Sdk/platform-tools/adb logcat *)"
+      "Bash(/c/Users/Hi/AppData/Local/Android/Sdk/platform-tools/adb logcat *)",
+      "Bash(./gradlew compileDebugKotlin)",
+      "Bash(chmod +x *)",
+      "Bash(curl *)",
+      "Read(//Users/mac/.claude/**)",
+      "Read(//Users/mac/**)",
+      "Bash(xcode-select -p)",
+      "Bash(xcrun simctl *)",
+      "Bash(xcodebuild -downloadPlatform iOS)",
+      "Bash(export JAVA_HOME=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home\")",
+      "Bash(export ANDROID_HOME=\"$HOME/Library/Android/sdk\")",
+      "Bash('/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/java' -version)",
+      "Bash(./gradlew compileDebugKotlin --no-daemon)",
+      "Bash(cp -r /Users/mac/laohuazhiyou/PresbyFriend/App /Users/mac/laohuazhiyou/ios/PresbyFriend/PresbyFriend/App)",
+      "Bash(cp -r /Users/mac/laohuazhiyou/PresbyFriend/Core /Users/mac/laohuazhiyou/ios/PresbyFriend/PresbyFriend/Core)",
+      "Bash(cp -r /Users/mac/laohuazhiyou/PresbyFriend/Features /Users/mac/laohuazhiyou/ios/PresbyFriend/PresbyFriend/Features)",
+      "Bash(xcodebuild -project PresbyFriend/PresbyFriend.xcodeproj -scheme PresbyFriend -destination 'platform=iOS Simulator,name=iPhone 16' build)",
+      "Bash(ruby *)",
+      "Bash(gem install *)",
+      "Bash(python3 *)",
+      "Bash(xcodebuild -project /Users/mac/laohuazhiyou/ios/PresbyFriend/PresbyFriend.xcodeproj -scheme PresbyFriend -destination 'platform=iOS Simulator,name=iPhone 16' build)",
+      "Bash(xcodebuild -project /Users/mac/laohuazhiyou/ios/PresbyFriend/PresbyFriend.xcodeproj -scheme PresbyFriend -destination 'platform=iOS Simulator,name=iPhone 16' clean build)"
     ]
   }
 }
