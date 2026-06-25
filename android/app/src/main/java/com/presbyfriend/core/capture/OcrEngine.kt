@@ -27,15 +27,17 @@ object OcrEngine {
             val image = InputImage.fromBitmap(bitmap, 0)
             recognizer.process(image)
                 .addOnSuccessListener { visionText ->
-                    val blocks = visionText.textBlocks.map { block ->
+                    val blocks = visionText.textBlocks.mapNotNull { block ->
+                        val text = block.text.trim()
+                        if (text.isBlank()) return@mapNotNull null
                         val topYRatio = block.boundingBox?.let { box ->
                             (box.top.toFloat() / bitmap.height).coerceIn(0f, 1f)
                         } ?: 0f
-                        PositionedBlock(text = block.text, topYRatio = topYRatio)
+                        PositionedBlock(text = text, topYRatio = topYRatio)
                     }
                     continuation.resume(blocks, null)
                 }
-                .addOnFailureListener { _ ->
+                .addOnFailureListener {
                     continuation.resume(emptyList(), null)
                 }
         }
