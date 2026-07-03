@@ -59,8 +59,8 @@ class PresbyFriendAccessibilityService : AccessibilityService() {
     private fun showOverlay() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         val d = resources.displayMetrics.density
-        val size = (56 * d).toInt()
-        val padding = (14 * d).toInt()
+        val size = (52 * d).toInt()
+        val padding = (10 * d).toInt()
 
         val button = ImageView(this).apply {
             setImageResource(R.drawable.ic_magnifier)
