@@ -95,7 +95,9 @@ class MagnifierViewModel(application: Application) : AndroidViewModel(applicatio
         val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
         recognizer.process(image)
             .addOnSuccessListener { visionText ->
-                val blocks = visionText.textBlocks.map { it.text }
+                val blocks = visionText.textBlocks
+                    .map { it.text.trim() }
+                    .filter { text -> text.length >= 3 && text.any { c -> c.isLetter() } }
                 _detectedTexts.value = blocks
             }
             .addOnCompleteListener {
