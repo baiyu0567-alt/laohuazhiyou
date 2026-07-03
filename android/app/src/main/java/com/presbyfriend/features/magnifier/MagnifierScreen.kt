@@ -19,7 +19,6 @@ import com.presbyfriend.core.i18n.L10n
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MagnifierScreen(
-    onTextDetected: (String) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -28,7 +27,6 @@ fun MagnifierScreen(
     val zoomLevel by viewModel.zoomLevel.collectAsState()
     val torchEnabled by viewModel.torchEnabled.collectAsState()
     val hasPermission by viewModel.hasPermission.collectAsState()
-    val detectedTexts by viewModel.detectedTexts.collectAsState()
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -75,29 +73,6 @@ fun MagnifierScreen(
                     },
                     modifier = Modifier.fillMaxSize()
                 )
-
-                // Detected text overlay
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.TopCenter)
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    detectedTexts.take(5).forEach { text ->
-                        Surface(
-                            onClick = { onTextDetected(text) },
-                            shape = MaterialTheme.shapes.small,
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
-                        ) {
-                            Text(
-                                text = text,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                    }
-                }
 
                 // Controls at bottom
                 Column(

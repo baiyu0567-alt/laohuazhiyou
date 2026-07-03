@@ -134,9 +134,6 @@ class MainActivity : ComponentActivity() {
 
                     composable("magnifier") {
                         MagnifierScreen(
-                            onTextDetected = { text ->
-                                navController.navigate("reader_content/${Base64.encodeToString(text.toByteArray(), Base64.URL_SAFE or Base64.NO_WRAP)}")
-                            },
                             onNavigateBack = {
                                 navController.navigate("home") {
                                     popUpTo("magnifier") { inclusive = true }

@@ -9,13 +9,9 @@ import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ProcessLifecycleOwner
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.util.concurrent.Executors
 
 class MagnifierViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -25,16 +21,10 @@ class MagnifierViewModel(application: Application) : AndroidViewModel(applicatio
     private val _torchEnabled = MutableStateFlow(false)
     val torchEnabled: StateFlow<Boolean> = _torchEnabled.asStateFlow()
 
-    private val _detectedTexts = MutableStateFlow<List<String>>(emptyList())
-    val detectedTexts: StateFlow<List<String>> = _detectedTexts.asStateFlow()
-
     private val _hasPermission = MutableStateFlow(false)
     val hasPermission: StateFlow<Boolean> = _hasPermission.asStateFlow()
 
     private var camera: androidx.camera.core.Camera? = null
-    private var imageAnalysis: ImageAnalysis? = null
-    private val analyzerExecutor = Executors.newSingleThreadExecutor()
-    private val recognizer = TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
 
     fun checkPermission() {
         val ctx = getApplication<Application>()
@@ -53,24 +43,13 @@ class MagnifierViewModel(application: Application) : AndroidViewModel(applicatio
                 it.setSurfaceProvider(previewView.surfaceProvider)
             }
 
-            val analysis = ImageAnalysis.Builder()
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .build()
-                .also { a ->
-                    a.setAnalyzer(analyzerExecutor) { imageProxy ->
-                        recognizeText(imageProxy)
-                    }
-                }
-            imageAnalysis = analysis
-
             val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
             cameraProvider.unbindAll()
             camera = cameraProvider.bindToLifecycle(
                 ProcessLifecycleOwner.get(),
                 cameraSelector,
-                preview,
-                analysis
+                preview
             )
         }, ContextCompat.getMainExecutor(ctx))
     }
@@ -83,30 +62,5 @@ class MagnifierViewModel(application: Application) : AndroidViewModel(applicatio
     fun toggleTorch() {
         _torchEnabled.value = !_torchEnabled.value
         camera?.cameraControl?.enableTorch(_torchEnabled.value)
-    }
-
-    private fun recognizeText(imageProxy: ImageProxy) {
-        val mediaImage = imageProxy.image
-        if (mediaImage == null) {
-            imageProxy.close()
-            return
-        }
-
-        val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-        recognizer.process(image)
-            .addOnSuccessListener { visionText ->
-                val blocks = visionText.textBlocks
-                    .map { it.text.trim() }
-                    .filter { text -> text.length >= 3 && text.any { c -> c.isLetter() } }
-                _detectedTexts.value = blocks
-            }
-            .addOnCompleteListener {
-                imageProxy.close()
-            }
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        analyzerExecutor.shutdown()
     }
 }
