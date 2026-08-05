@@ -42,6 +42,10 @@
     <string name="accessibility_action">Iniciar lupa</string>
     <string name="enable_accessibility">Activar botón flotante</string>
     <string name="accessibility_hint">Leer texto en cualquier app con una lupa flotante</string>
+    <string name="accessibility_disclosure_title">Botón de lupa flotante</string>
+    <string name="accessibility_disclosure_body">PresbyFriend utiliza la API AccessibilityService para mostrar un botón de lupa flotante sobre otras aplicaciones. Al tocarlo, la app toma una captura de pantalla única para detectar texto y lo abre en el modo lectura para verlo mejor.</string>
+    <string name="accessibility_disclosure_note">No se recopila, almacena ni comparte ningún dato personal o sensible del usuario. Todo el reconocimiento de texto se realiza en su dispositivo.</string>
+    <string name="open_accessibility_settings">Abrir ajustes de accesibilidad</string>
     <string name="clipboard_empty_hint">Copia primero el texto, luego toca aquí</string>
     <string name="no_text_found">No se encontró texto en esta pantalla</string>
     <string name="daily_limit_reached">Límite diario alcanzado. Actualiza a Pro para uso ilimitado.</string>
@@ -54,6 +58,7 @@
     <string name="data_management">Gestión de datos</string>
     <string name="reset_settings">Restablecer ajustes</string>
     <string name="reset_confirm">Restablecer todos los ajustes a valores predeterminados. ¿Continuar?</string>
+    <string name="settings_auto_save">Los cambios se guardan automáticamente</string>
     <string name="version_footer">PresbyFriend v1.0 – Diseñado para la presbicia</string>
     <string name="camera_error">Cámara no disponible</string>
     <string name="camera_permission_required">Se requiere permiso de cámara para la lupa</string>

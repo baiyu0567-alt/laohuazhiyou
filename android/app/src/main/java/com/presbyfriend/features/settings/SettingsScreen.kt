@@ -1,6 +1,8 @@
 package com.presbyfriend.features.settings
 
 import android.app.Activity
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,6 +33,7 @@ fun SettingsScreen(
     val language by viewModel.language.collectAsState()
 
     var showResetDialog by remember { mutableStateOf(false) }
+    var showDisclosureDialog by remember { mutableStateOf(false) }
     var languageExpanded by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -46,6 +49,15 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
+            // Auto-save hint
+            Text(
+                stringResource(L10n.settingsAutoSave),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+
             // Font size
             Text(
                 stringResource(L10n.defaultFont),
@@ -141,6 +153,27 @@ fun SettingsScreen(
                 }
             }
 
+            // Floating magnifier button (accessibility service)
+            HorizontalDivider()
+            Column {
+                Text(
+                    stringResource(L10n.accessibilityDisclosureTitle),
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Text(
+                    stringResource(L10n.accessibilityHint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { showDisclosureDialog = true },
+                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                ) {
+                    Text(stringResource(L10n.enableAccessibility))
+                }
+            }
+
             // Pro upgrade
             Button(
                 onClick = onNavigateToPaywall,
@@ -179,6 +212,30 @@ fun SettingsScreen(
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
         }
+    }
+
+    if (showDisclosureDialog) {
+        AlertDialog(
+            onDismissRequest = { showDisclosureDialog = false },
+            title = { Text(stringResource(L10n.accessibilityDisclosureTitle)) },
+            text = {
+                Text(stringResource(L10n.accessibilityDisclosureBody) + "\n\n" +
+                     stringResource(L10n.accessibilityDisclosureNote))
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDisclosureDialog = false
+                    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                }) {
+                    Text(stringResource(L10n.openAccessibilitySettings))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDisclosureDialog = false }) {
+                    Text(stringResource(L10n.close))
+                }
+            }
+        )
     }
 
     if (showResetDialog) {

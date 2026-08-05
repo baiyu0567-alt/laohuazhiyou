@@ -5,18 +5,28 @@ plugins {
 
 android {
     namespace = "com.presbyfriend"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.presbyfriend"
+        applicationId = "com.PresbyFriend"
         minSdk = 26
-        targetSdk = 34
-        versionCode = 1
+        targetSdk = 35
+        versionCode = 5
         versionName = "1.0.0"
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = file("presbyfriend.keystore")
+            storePassword = "presbyfriend2026"
+            keyAlias = "presbyfriend"
+            keyPassword = "presbyfriend2026"
+        }
     }
 
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }

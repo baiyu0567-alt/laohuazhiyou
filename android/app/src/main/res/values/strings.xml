@@ -37,6 +37,7 @@
     <string name="data_management">Data Management</string>
     <string name="reset_settings">Reset Settings</string>
     <string name="reset_confirm">This will reset all settings to defaults. Continue?</string>
+    <string name="settings_auto_save">Changes are saved automatically</string>
     <string name="version_footer">PresbyFriend v1.0 — Made for presbyopia</string>
 
     <!-- Subscription -->
@@ -66,6 +67,10 @@
     <string name="accessibility_action">Launch magnifier</string>
     <string name="enable_accessibility">Enable Floating Button</string>
     <string name="accessibility_hint">Read text in any app with a floating magnifier</string>
+    <string name="accessibility_disclosure_title">Floating Magnifier Button</string>
+    <string name="accessibility_disclosure_body">PresbyFriend uses the AccessibilityService API to show a floating magnifier button on top of other apps. When you tap it, the app takes a one-time screenshot to detect text and opens it in the reading mode for easier viewing.</string>
+    <string name="accessibility_disclosure_note">No personal or sensitive user data is collected, stored, or shared. All text recognition happens on your device.</string>
+    <string name="open_accessibility_settings">Open Accessibility Settings</string>
     <string name="clipboard_empty_hint">Copy text first, then tap here</string>
     <string name="no_text_found">No text found on this screen</string>
     <string name="daily_limit_reached">Daily limit reached. Upgrade to Pro for unlimited use.</string>

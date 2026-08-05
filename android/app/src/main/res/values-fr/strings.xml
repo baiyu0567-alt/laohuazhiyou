@@ -42,6 +42,10 @@
     <string name="accessibility_action">Lancer la loupe</string>
     <string name="enable_accessibility">Activer le bouton flottant</string>
     <string name="accessibility_hint">Lire du texte dans n\'importe quelle application avec une loupe flottante</string>
+    <string name="accessibility_disclosure_title">Bouton de loupe flottante</string>
+    <string name="accessibility_disclosure_body">PresbyFriend utilise l\'API AccessibilityService pour afficher un bouton de loupe flottant au-dessus des autres applications. En appuyant dessus, l\'application prend une capture d\'écran unique pour détecter le texte et l\'ouvre en mode lecture pour une visualisation plus facile.</string>
+    <string name="accessibility_disclosure_note">Aucune donnée personnelle ou sensible n\'est collectée, stockée ou partagée. Toute la reconnaissance de texte se fait sur votre appareil.</string>
+    <string name="open_accessibility_settings">Ouvrir les paramètres d\'accessibilité</string>
     <string name="clipboard_empty_hint">Copiez d\'abord le texte, puis appuyez ici</string>
     <string name="no_text_found">Aucun texte trouvé sur cet écran</string>
     <string name="daily_limit_reached">Limite quotidienne atteinte. Passez à Pro pour une utilisation illimitée.</string>
@@ -54,6 +58,7 @@
     <string name="data_management">Gestion des données</string>
     <string name="reset_settings">Réinitialiser les paramètres</string>
     <string name="reset_confirm">Remettre tous les paramètres par défaut. Continuer ?</string>
+    <string name="settings_auto_save">Les modifications sont enregistrées automatiquement</string>
     <string name="version_footer">PresbyFriend v1.0 – Conçu pour la presbytie</string>
     <string name="camera_error">Appareil photo indisponible</string>
     <string name="camera_permission_required">L\'autorisation de l\'appareil photo est requise pour la loupe</string>

@@ -42,6 +42,10 @@
     <string name="accessibility_action">Avvia lente</string>
     <string name="enable_accessibility">Attiva pulsante fluttuante</string>
     <string name="accessibility_hint">Leggi testo in qualsiasi app con una lente fluttuante</string>
+    <string name="accessibility_disclosure_title">Pulsante lente fluttuante</string>
+    <string name="accessibility_disclosure_body">PresbyFriend utilizza l\'API AccessibilityService per mostrare un pulsante lente fluttuante sopra le altre app. Quando lo tocchi, l\'app acquisisce uno screenshot singolo per rilevare il testo e lo apre in modalità lettura per una visualizzazione più semplice.</string>
+    <string name="accessibility_disclosure_note">Nessun dato personale o sensibile dell\'utente viene raccolto, archiviato o condiviso. Tutto il riconoscimento del testo avviene sul tuo dispositivo.</string>
+    <string name="open_accessibility_settings">Apri impostazioni accessibilità</string>
     <string name="clipboard_empty_hint">Copia prima il testo, poi tocca qui</string>
     <string name="no_text_found">Nessun testo trovato su questa schermata</string>
     <string name="daily_limit_reached">Limite giornaliero raggiunto. Passa a Pro per uso illimitato.</string>
@@ -54,6 +58,7 @@
     <string name="data_management">Gestione dati</string>
     <string name="reset_settings">Ripristina impostazioni</string>
     <string name="reset_confirm">Ripristinare tutte le impostazioni ai valori predefiniti. Continuare?</string>
+    <string name="settings_auto_save">Le modifiche vengono salvate automaticamente</string>
     <string name="version_footer">PresbyFriend v1.0 – Progettato per la presbiopia</string>
     <string name="camera_error">Fotocamera non disponibile</string>
     <string name="camera_permission_required">Il permesso della fotocamera è richiesto per la lente</string>

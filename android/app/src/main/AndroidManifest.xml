@@ -8,9 +8,8 @@
         </intent>
     </queries>
 
-    <!-- Camera & torch -->
+    <!-- Camera -->
     <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.FLASHLIGHT" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <!-- Internet (URL extraction) -->

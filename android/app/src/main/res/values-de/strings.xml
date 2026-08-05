@@ -42,6 +42,10 @@
     <string name="accessibility_action">Lupe starten</string>
     <string name="enable_accessibility">Schwebende Schaltfläche aktivieren</string>
     <string name="accessibility_hint">Text in jeder App mit schwebender Lupe lesen</string>
+    <string name="accessibility_disclosure_title">Schwebende Lupen-Schaltfläche</string>
+    <string name="accessibility_disclosure_body">PresbyFriend verwendet die AccessibilityService-API, um eine schwebende Lupen-Schaltfläche über anderen Apps anzuzeigen. Beim Antippen erstellt die App einen einmaligen Screenshot, erkennt Text und öffnet ihn im Lesemodus zur besseren Ansicht.</string>
+    <string name="accessibility_disclosure_note">Es werden keine personenbezogenen oder sensiblen Nutzerdaten erfasst, gespeichert oder weitergegeben. Die gesamte Texterkennung erfolgt auf Ihrem Gerät.</string>
+    <string name="open_accessibility_settings">Bedienungshilfen öffnen</string>
     <string name="clipboard_empty_hint">Text zuerst kopieren, dann hier antippen</string>
     <string name="no_text_found">Kein Text auf diesem Bildschirm gefunden</string>
     <string name="daily_limit_reached">Tageslimit erreicht. Upgraden Sie auf Pro für unbegrenzte Nutzung.</string>
@@ -54,6 +58,7 @@
     <string name="data_management">Datenverwaltung</string>
     <string name="reset_settings">Einstellungen zurücksetzen</string>
     <string name="reset_confirm">Alle Einstellungen auf Standard zurücksetzen. Fortfahren?</string>
+    <string name="settings_auto_save">Änderungen werden automatisch gespeichert</string>
     <string name="version_footer">PresbyFriend v1.0 – Für Alterssichtigkeit entwickelt</string>
     <string name="camera_error">Kamera nicht verfügbar</string>
     <string name="camera_permission_required">Kameraberechtigung für die Lupe erforderlich</string>

@@ -67,4 +67,9 @@ object L10n {
     @StringRes val accessibilityAction = R.string.accessibility_action
     @StringRes val enableAccessibility = R.string.enable_accessibility
     @StringRes val accessibilityHint = R.string.accessibility_hint
+    @StringRes val accessibilityDisclosureTitle = R.string.accessibility_disclosure_title
+    @StringRes val accessibilityDisclosureBody = R.string.accessibility_disclosure_body
+    @StringRes val accessibilityDisclosureNote = R.string.accessibility_disclosure_note
+    @StringRes val openAccessibilitySettings = R.string.open_accessibility_settings
+    @StringRes val settingsAutoSave = R.string.settings_auto_save
 }
