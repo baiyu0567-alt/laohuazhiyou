@@ -17,7 +17,12 @@ class BillingManager(application: Application) {
     private val scope = CoroutineScope(Dispatchers.IO)
     private val billingClient = BillingClient.newBuilder(application)
         .setListener(::onPurchasesUpdated)
-        .enablePendingPurchases()
+        .enablePendingPurchases(
+            PendingPurchasesParams.newBuilder()
+                .enableOneTimeProducts()
+                .enablePrepaidPlans()
+                .build()
+        )
         .build()
 
     private val _products = MutableStateFlow<List<ProductDetails>>(emptyList())
@@ -58,8 +63,8 @@ class BillingManager(application: Application) {
             .setProductList(productList)
             .build()
 
-        billingClient.queryProductDetailsAsync(params) { _, details ->
-            _products.value = details ?: emptyList()
+        billingClient.queryProductDetailsAsync(params) { _, result ->
+            _products.value = result.productDetailsList
         }
     }
 
@@ -85,7 +90,7 @@ class BillingManager(application: Application) {
                 .setProductType(BillingClient.ProductType.SUBS)
                 .build()
         ) { _, purchases ->
-            val isPro = purchases?.any { productIds.contains(it.products.firstOrNull()) } ?: false
+            val isPro = purchases.any { productIds.contains(it.products.firstOrNull()) }
             if (isPro) {
                 scope.launch { store.setIsPro(true) }
             }

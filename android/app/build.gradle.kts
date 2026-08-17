@@ -1,17 +1,19 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
 }
 
 android {
     namespace = "com.presbyfriend"
-    compileSdk = 35
+    compileSdk = 36
+    buildToolsVersion = "36.1.0"
 
     defaultConfig {
         applicationId = "com.PresbyFriend"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 5
+        targetSdk = 36
+        versionCode = 7
         versionName = "1.0.0"
     }
 
@@ -43,10 +45,6 @@ android {
 
     buildFeatures {
         compose = true
-    }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion = libs.versions.compose.compiler.get()
     }
 }
 
