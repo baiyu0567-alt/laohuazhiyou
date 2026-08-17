@@ -126,17 +126,16 @@ class PresbyFriendAccessibilityService : AccessibilityService() {
         if (isProcessing) return
         isProcessing = true
 
-        // TODO: uncomment before release
-        // val store = (applicationContext as com.presbyfriend.PresbyFriendApp).settingsStore
+        val store = (applicationContext as com.presbyfriend.PresbyFriendApp).settingsStore
         scope.launch {
-            // val canUse = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            //     store.canUseToday()
-            // }
-            // if (!canUse) {
-            //     openPaywall()
-            //     resetProcessing()
-            //     return@launch
-            // }
+            val canUse = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                store.canUseToday()
+            }
+            if (!canUse) {
+                openPaywall()
+                resetProcessing()
+                return@launch
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 screenshotThenOcr()
             } else {
@@ -286,13 +285,12 @@ class PresbyFriendAccessibilityService : AccessibilityService() {
     // endregion
 
     private fun openReader(text: String) {
-        // TODO: uncomment before release
-        // scope.launch {
-        //     val store = (applicationContext as com.presbyfriend.PresbyFriendApp).settingsStore
-        //     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-        //         store.recordUse()
-        //     }
-        // }
+        scope.launch {
+            val store = (applicationContext as com.presbyfriend.PresbyFriendApp).settingsStore
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                store.recordUse()
+            }
+        }
         val intent = Intent(this, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             .setAction(Intent.ACTION_SEND)
