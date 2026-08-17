@@ -25,7 +25,7 @@
     <string name="restore_success">Achats restaurés. Bon retour chez Pro !</string>
     <string name="restore_no_purchases">Aucun achat antérieur trouvé.</string>
     <string name="close">Fermer</string>
-    <string name="play_store_coming">L\'achat sera bientôt disponible sur Google Play.</string>
+    <string name="play_store_coming">Les offres sont encore en cours de chargement. Veuillez réessayer dans quelques minutes.</string>
     <string name="pro_feature">Fonction Pro</string>
     <string name="free_limit_reached">Limite quotidienne de 10 lectures gratuites atteinte. Passez à Pro pour un accès illimité.</string>
     <string name="pro_monthly">PresbyFriend Pro Mensuel</string>

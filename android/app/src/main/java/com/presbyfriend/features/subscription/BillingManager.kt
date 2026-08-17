@@ -65,7 +65,17 @@ class BillingManager(application: Application) {
 
         billingClient.queryProductDetailsAsync(params) { _, result ->
             _products.value = result.productDetailsList
+            if (result.productDetailsList.isEmpty()) {
+                android.util.Log.w(
+                    "BillingManager",
+                    "No products fetched. Unfetched: ${result.unfetchedProductList.map { it.productId }}"
+                )
+            }
         }
+    }
+
+    fun refresh() {
+        if (_isReady.value) loadProducts()
     }
 
     fun purchase(activity: Activity, product: ProductDetails, onResult: (Boolean) -> Unit) {

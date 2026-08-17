@@ -54,7 +54,7 @@
     <string name="restore_success">Purchases restored. Welcome back to Pro!</string>
     <string name="restore_no_purchases">No previous purchases found.</string>
     <string name="close">Close</string>
-    <string name="play_store_coming">Purchase will be available on Google Play. Stay tuned!</string>
+    <string name="play_store_coming">Plans are still loading. Please try again in a few minutes.</string>
 
     <!-- URL extraction -->
     <string name="loading_url">Loading content…</string>

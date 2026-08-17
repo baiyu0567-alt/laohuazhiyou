@@ -25,7 +25,7 @@
     <string name="restore_success">Acquisti ripristinati. Bentornato in Pro!</string>
     <string name="restore_no_purchases">Nessun acquisto precedente trovato.</string>
     <string name="close">Chiudi</string>
-    <string name="play_store_coming">L\'acquisto sarà presto disponibile su Google Play.</string>
+    <string name="play_store_coming">I piani sono ancora in caricamento. Riprova tra qualche minuto.</string>
     <string name="pro_feature">Funzione Pro</string>
     <string name="free_limit_reached">Hai raggiunto il limite di 10 letture gratuite al giorno. Passa a Pro per accesso illimitato.</string>
     <string name="pro_monthly">PresbyFriend Pro Mensile</string>

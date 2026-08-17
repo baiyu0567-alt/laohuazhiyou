@@ -140,6 +140,7 @@ fun PaywallScreen(
                 fallbackPlans.forEach { (name, desc, price) ->
                     Card(
                         onClick = {
+                            billingManager.refresh()
                             scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.play_store_coming)) }
                         },
                         modifier = Modifier.fillMaxWidth(),
