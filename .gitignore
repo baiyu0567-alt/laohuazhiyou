@@ -49,6 +49,7 @@ local.properties
 build/
 */build/
 app/release/
+.kotlin/
 *.apk
 *.aab
 *.jks
