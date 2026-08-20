@@ -43,9 +43,10 @@
     <string name="enable_accessibility">Activar botón flotante</string>
     <string name="accessibility_hint">Leer texto en cualquier app con una lupa flotante</string>
     <string name="accessibility_disclosure_title">Botón de lupa flotante</string>
-    <string name="accessibility_disclosure_body">PresbyFriend utiliza la API AccessibilityService para mostrar un botón de lupa flotante sobre otras aplicaciones. Al tocarlo, la app toma una captura de pantalla única para detectar texto y lo abre en el modo lectura para verlo mejor.</string>
+    <string name="accessibility_disclosure_body">PresbyFriend utiliza la API Android AccessibilityService con un único fin: ayudarte a leer textos pequeños en cualquier pantalla. (1) Muestra un botón de lupa flotante sobre otras aplicaciones y (2), al tocarlo, captura una única captura de pantalla para reconocer el texto y lo abre en el modo lectura. Este permiso es necesario porque un botón flotante que funciona sobre otras aplicaciones solo puede mostrarse mediante la superposición de accesibilidad.</string>
     <string name="accessibility_disclosure_note">No se recopila, almacena ni comparte ningún dato personal o sensible del usuario. Todo el reconocimiento de texto se realiza en su dispositivo.</string>
-    <string name="open_accessibility_settings">Abrir ajustes de accesibilidad</string>
+    <string name="accessibility_consent_accept">Aceptar y continuar</string>
+    <string name="accessibility_consent_decline">Cancelar</string>
     <string name="clipboard_empty_hint">Copia primero el texto, luego toca aquí</string>
     <string name="no_text_found">No se encontró texto en esta pantalla</string>
     <string name="daily_limit_reached">Límite diario alcanzado. Actualiza a Pro para uso ilimitado.</string>

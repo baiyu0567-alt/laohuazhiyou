@@ -227,12 +227,12 @@ fun SettingsScreen(
                     showDisclosureDialog = false
                     context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 }) {
-                    Text(stringResource(L10n.openAccessibilitySettings))
+                    Text(stringResource(L10n.accessibilityConsentAccept))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDisclosureDialog = false }) {
-                    Text(stringResource(L10n.close))
+                    Text(stringResource(L10n.accessibilityConsentDecline))
                 }
             }
         )

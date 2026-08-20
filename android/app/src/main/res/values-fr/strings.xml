@@ -43,9 +43,10 @@
     <string name="enable_accessibility">Activer le bouton flottant</string>
     <string name="accessibility_hint">Lire du texte dans n\'importe quelle application avec une loupe flottante</string>
     <string name="accessibility_disclosure_title">Bouton de loupe flottante</string>
-    <string name="accessibility_disclosure_body">PresbyFriend utilise l\'API AccessibilityService pour afficher un bouton de loupe flottant au-dessus des autres applications. En appuyant dessus, l\'application prend une capture d\'écran unique pour détecter le texte et l\'ouvre en mode lecture pour une visualisation plus facile.</string>
+    <string name="accessibility_disclosure_body">PresbyFriend utilise l\'API Android AccessibilityService dans un seul but : vous aider à lire les petits textes sur n\'importe quel écran. Elle (1) affiche un bouton de loupe flottant au-dessus des autres applications et (2), lorsque vous appuyez dessus, capture une capture d\'écran unique pour reconnaître le texte et l\'ouvre en mode lecture. Cette autorisation est nécessaire car un bouton flottant fonctionnant au-dessus d\'autres applications ne peut être affiché qu\'à l\'aide de la superposition d\'accessibilité.</string>
     <string name="accessibility_disclosure_note">Aucune donnée personnelle ou sensible n\'est collectée, stockée ou partagée. Toute la reconnaissance de texte se fait sur votre appareil.</string>
-    <string name="open_accessibility_settings">Ouvrir les paramètres d\'accessibilité</string>
+    <string name="accessibility_consent_accept">Accepter et continuer</string>
+    <string name="accessibility_consent_decline">Annuler</string>
     <string name="clipboard_empty_hint">Copiez d\'abord le texte, puis appuyez ici</string>
     <string name="no_text_found">Aucun texte trouvé sur cet écran</string>
     <string name="daily_limit_reached">Limite quotidienne atteinte. Passez à Pro pour une utilisation illimitée.</string>

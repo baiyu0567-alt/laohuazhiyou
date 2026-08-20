@@ -70,6 +70,7 @@ object L10n {
     @StringRes val accessibilityDisclosureTitle = R.string.accessibility_disclosure_title
     @StringRes val accessibilityDisclosureBody = R.string.accessibility_disclosure_body
     @StringRes val accessibilityDisclosureNote = R.string.accessibility_disclosure_note
-    @StringRes val openAccessibilitySettings = R.string.open_accessibility_settings
+    @StringRes val accessibilityConsentAccept = R.string.accessibility_consent_accept
+    @StringRes val accessibilityConsentDecline = R.string.accessibility_consent_decline
     @StringRes val settingsAutoSave = R.string.settings_auto_save
 }

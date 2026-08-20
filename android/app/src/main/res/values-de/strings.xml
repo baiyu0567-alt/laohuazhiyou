@@ -43,9 +43,10 @@
     <string name="enable_accessibility">Schwebende Schaltfläche aktivieren</string>
     <string name="accessibility_hint">Text in jeder App mit schwebender Lupe lesen</string>
     <string name="accessibility_disclosure_title">Schwebende Lupen-Schaltfläche</string>
-    <string name="accessibility_disclosure_body">PresbyFriend verwendet die AccessibilityService-API, um eine schwebende Lupen-Schaltfläche über anderen Apps anzuzeigen. Beim Antippen erstellt die App einen einmaligen Screenshot, erkennt Text und öffnet ihn im Lesemodus zur besseren Ansicht.</string>
+    <string name="accessibility_disclosure_body">PresbyFriend verwendet die Android AccessibilityService-API zu einem einzigen Zweck: Ihnen das Lesen kleiner Texte auf jedem Bildschirm zu ermöglichen. Sie (1) zeigt eine schwebende Lupen-Schaltfläche über anderen Apps an und (2) erstellt beim Antippen einen einzelnen Screenshot, um den Text zu erkennen und ihn im Lesemodus zu öffnen. Diese Berechtigung ist erforderlich, da eine schwebende Schaltfläche über anderen Apps nur über das Bedienungshilfe-Overlay angezeigt werden kann.</string>
     <string name="accessibility_disclosure_note">Es werden keine personenbezogenen oder sensiblen Nutzerdaten erfasst, gespeichert oder weitergegeben. Die gesamte Texterkennung erfolgt auf Ihrem Gerät.</string>
-    <string name="open_accessibility_settings">Bedienungshilfen öffnen</string>
+    <string name="accessibility_consent_accept">Zustimmen und fortfahren</string>
+    <string name="accessibility_consent_decline">Abbrechen</string>
     <string name="clipboard_empty_hint">Text zuerst kopieren, dann hier antippen</string>
     <string name="no_text_found">Kein Text auf diesem Bildschirm gefunden</string>
     <string name="daily_limit_reached">Tageslimit erreicht. Upgraden Sie auf Pro für unbegrenzte Nutzung.</string>
