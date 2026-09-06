@@ -13,8 +13,8 @@ android {
         applicationId = "com.PresbyFriend"
         minSdk = 26
         targetSdk = 36
-        versionCode = 13
-        versionName = "1.0.0"
+        versionCode = 18
+        versionName = "1.0.4"
     }
 
     signingConfigs {

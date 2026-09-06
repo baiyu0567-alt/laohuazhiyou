@@ -31,6 +31,7 @@ fun PaywallScreen(
     val billingManager = remember { BillingManager(context.applicationContext as Application) }
     val products by billingManager.products.collectAsState()
     val isReady by billingManager.isReady.collectAsState()
+    val lastError by billingManager.lastError.collectAsState()
     var purchasing by remember { mutableStateOf(false) }
     var restoring by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -38,6 +39,12 @@ fun PaywallScreen(
 
     LaunchedEffect(Unit) {
         billingManager.startConnection()
+    }
+
+    LaunchedEffect(lastError) {
+        lastError?.let { msg ->
+            snackbarHostState.showSnackbar(msg)
+        }
     }
 
     Scaffold(

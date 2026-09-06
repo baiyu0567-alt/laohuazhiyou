@@ -31,6 +31,7 @@ fun SettingsScreen(
     val letterSpacing by viewModel.letterSpacing.collectAsState()
     val rulerEnabled by viewModel.rulerEnabled.collectAsState()
     val language by viewModel.language.collectAsState()
+    val isPro by viewModel.isPro.collectAsState()
 
     var showResetDialog by remember { mutableStateOf(false) }
     var showDisclosureDialog by remember { mutableStateOf(false) }
@@ -174,19 +175,21 @@ fun SettingsScreen(
                 }
             }
 
-            // Pro upgrade
-            Button(
-                onClick = onNavigateToPaywall,
-                modifier = Modifier.fillMaxWidth().height(56.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = ReadingTheme.SEPIA.backgroundColor,
-                    contentColor = ReadingTheme.SEPIA.textColor
-                )
-            ) {
-                Text(
-                    "${stringResource(L10n.upgradePro)}",
-                    style = MaterialTheme.typography.titleMedium
-                )
+            // Pro upgrade (hidden when already subscribed)
+            if (!isPro) {
+                Button(
+                    onClick = onNavigateToPaywall,
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ReadingTheme.SEPIA.backgroundColor,
+                        contentColor = ReadingTheme.SEPIA.textColor
+                    )
+                ) {
+                    Text(
+                        "${stringResource(L10n.upgradePro)}",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
             }
 
             // Reset

@@ -31,6 +31,9 @@ class BillingManager(application: Application) {
     private val _isReady = MutableStateFlow(false)
     val isReady: StateFlow<Boolean> = _isReady.asStateFlow()
 
+    private val _lastError = MutableStateFlow<String?>(null)
+    val lastError: StateFlow<String?> = _lastError.asStateFlow()
+
     private val productIds = listOf(
         "com.presbyfriend.pro.monthly",
         "com.presbyfriend.pro.yearly"
@@ -63,14 +66,14 @@ class BillingManager(application: Application) {
             .setProductList(productList)
             .build()
 
-        billingClient.queryProductDetailsAsync(params) { _, result ->
+        billingClient.queryProductDetailsAsync(params) { billingResult, result ->
+            android.util.Log.w(
+                "BillingManager",
+                "queryProductDetails: responseCode=${billingResult.responseCode} debugMessage=${billingResult.debugMessage} " +
+                    "products=${result.productDetailsList.map { it.productId }} " +
+                    "unfetched=${result.unfetchedProductList}"
+            )
             _products.value = result.productDetailsList
-            if (result.productDetailsList.isEmpty()) {
-                android.util.Log.w(
-                    "BillingManager",
-                    "No products fetched. Unfetched: ${result.unfetchedProductList.map { it.productId }}"
-                )
-            }
         }
     }
 
@@ -80,7 +83,22 @@ class BillingManager(application: Application) {
 
     fun purchase(activity: Activity, product: ProductDetails, onResult: (Boolean) -> Unit) {
         pendingCallback = onResult
-        val offerToken = product.subscriptionOfferDetails?.firstOrNull()?.offerToken ?: ""
+        // Billing 8.x REQUIRES a real (non-null) offerToken for subscriptions. Use the
+        // base plan's token (offerId == null); fall back to the first offer detail.
+        val offerToken = product.subscriptionOfferDetails
+            ?.firstOrNull { it.offerId == null }
+            ?.offerToken
+            ?: product.subscriptionOfferDetails?.firstOrNull()?.offerToken
+
+        if (offerToken == null) {
+            val msg = "No offerToken for ${product.productId}"
+            android.util.Log.e("BillingManager", msg)
+            _lastError.value = msg
+            pendingCallback?.invoke(false)
+            pendingCallback = null
+            return
+        }
+
         val params = BillingFlowParams.newBuilder()
             .setProductDetailsParamsList(
                 listOf(
@@ -91,7 +109,14 @@ class BillingManager(application: Application) {
                 )
             )
             .build()
-        billingClient.launchBillingFlow(activity, params)
+        val result = billingClient.launchBillingFlow(activity, params)
+        if (result.responseCode != BillingClient.BillingResponseCode.OK) {
+            val msg = "code ${result.responseCode}: ${result.debugMessage}"
+            android.util.Log.w("BillingManager", "launchBillingFlow failed: $msg")
+            _lastError.value = msg
+            pendingCallback?.invoke(false)
+            pendingCallback = null
+        }
     }
 
     fun restorePurchases(onResult: (Boolean) -> Unit) {

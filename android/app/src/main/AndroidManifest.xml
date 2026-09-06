@@ -15,6 +15,9 @@
     <!-- Internet (URL extraction) -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Google Play Billing (required for in-app purchases / subscriptions) -->
+    <uses-permission android:name="com.android.vending.BILLING" />
+
 
     <application
         android:name=".PresbyFriendApp"

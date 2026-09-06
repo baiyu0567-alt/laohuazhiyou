@@ -32,6 +32,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _language = MutableStateFlow("en")
     val language: StateFlow<String> = _language.asStateFlow()
 
+    private val _isPro = MutableStateFlow(false)
+    val isPro: StateFlow<Boolean> = _isPro.asStateFlow()
+
     val availableLanguages = listOf(
         "en" to "English",
         "de" to "Deutsch",
@@ -48,6 +51,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { store.letterSpacing.collect { _letterSpacing.value = it } }
         viewModelScope.launch { store.rulerEnabled.collect { _rulerEnabled.value = it } }
         viewModelScope.launch { store.language.collect { _language.value = it } }
+        viewModelScope.launch { store.isPro.collect { _isPro.value = it } }
     }
 
     fun setFontSize(value: Float) {
