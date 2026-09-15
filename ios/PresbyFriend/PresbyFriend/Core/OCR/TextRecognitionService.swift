@@ -63,9 +63,19 @@ final class TextRecognitionService {
     }
 
     /// 按纵向位置排序（画面上方到下方），恢复阅读顺序。
+    ///
+    /// 比较器必须是全序：`sorted(by:)` 不保证稳定，同一行内被 Vision 拆开的块
+    /// （字号混排、表格、带上标的标题）若 `origin.y` 相等，顺序会逐次运行而变。
+    /// 所以 y 相等时再按 `minX` 升序（左栏在前）打破平局。
+    /// 真正的两栏重排需要行聚类，不在本任务范围内。
     static func blocks(from observations: [VNRecognizedTextObservation]) -> [RecognizedBlock] {
         observations
-            .sorted { $0.boundingBox.origin.y > $1.boundingBox.origin.y }
+            .sorted { a, b in
+                if a.boundingBox.origin.y != b.boundingBox.origin.y {
+                    return a.boundingBox.origin.y > b.boundingBox.origin.y
+                }
+                return a.boundingBox.minX < b.boundingBox.minX
+            }
             .compactMap { obs in
                 guard let top = obs.topCandidates(1).first else { return nil }
                 let box = obs.boundingBox
