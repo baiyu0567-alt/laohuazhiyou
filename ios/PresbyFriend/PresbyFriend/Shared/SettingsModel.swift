@@ -9,6 +9,7 @@ final class SettingsModel: ObservableObject {
     @Published var letterSpacing: CGFloat = 1.0
     @Published var rulerEnabled: Bool = false
     @Published var language: String = "en"
+    @Published var recognitionLanguage: RecognitionLanguage = .system
 
     /// Set by the main app when a URL is opened from another app. Reset to nil after handling.
     @Published var pendingURL: URL?
@@ -23,6 +24,8 @@ final class SettingsModel: ObservableObject {
         letterSpacing = defaults.cgFloat(forKey: "letterSpacing") ?? 1.0
         rulerEnabled = defaults.bool(forKey: "rulerEnabled")
         language = defaults.string(forKey: "language") ?? "en"
+        recognitionLanguage = RecognitionLanguage(
+            rawValue: defaults.string(forKey: "recognitionLanguage") ?? "system") ?? .system
     }
 
     func save() {
@@ -32,6 +35,7 @@ final class SettingsModel: ObservableObject {
         defaults.set(letterSpacing, forKey: "letterSpacing")
         defaults.set(rulerEnabled, forKey: "rulerEnabled")
         defaults.set(language, forKey: "language")
+        defaults.set(recognitionLanguage.rawValue, forKey: "recognitionLanguage")
         syncToCloud()
     }
 
@@ -59,6 +63,7 @@ final class SettingsModel: ObservableObject {
         lineHeight = 1.8
         letterSpacing = 1.0
         rulerEnabled = false
+        recognitionLanguage = .system
         save()
     }
 }
