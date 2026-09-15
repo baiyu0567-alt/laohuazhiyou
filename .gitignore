@@ -57,3 +57,6 @@ app/release/
 
 # macOS
 .DS_Store
+
+# SDD workspace (scratch)
+.superpowers/
