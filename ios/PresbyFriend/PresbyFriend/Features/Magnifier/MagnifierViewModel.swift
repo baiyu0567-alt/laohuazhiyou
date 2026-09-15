@@ -42,7 +42,7 @@ final class MagnifierViewModel: NSObject, ObservableObject {
 
     /// 会话代次。每次 `startSession()` / `stopSession()` 自增。
     ///
-    /// **为什么需要它**：`startSession()` 把 `startRunning()` 丢到全局队列上阻塞执行，收尾
+    /// **为什么需要它**：`startSession()` 把 `startRunning()` 丢到 `sessionQueue` 上阻塞执行，收尾
     /// 却是一个独立的 `Task { @MainActor }`。那个收尾可能在 `stopSession()`（它把
     /// `isSessionRunning` 置回 false）**之后**才落地：`startRunning()` 还阻塞着时用户离开
     /// 放大镜页、回来又重新 `startSession()`，而**第一次**那个块的收尾仍可能晚到——于是
