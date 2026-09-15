@@ -54,3 +54,6 @@ app/release/
 *.aab
 *.jks
 *.keystore
+
+# macOS
+.DS_Store
