@@ -64,10 +64,11 @@ struct ContentView: View {
     /// 识别语言偏好**已经生效**的那一个值。
     ///
     /// 用来区分两件长得一样的事：**用户在设置页改了选择**，和**冷启动时
-    /// `settings.load()` 把存下来的值读进来**——`load()` 会把默认值 `.system`
-    /// 改成存储值，所以 `settings.recognitionLanguage` 的 `.onChange` 在冷启动
-    /// 时确实会真触发一次。只有前者需要补一次预热；后者由 `.task` 里那次负责。
-    /// 不区分就会每次冷启动预热两遍。
+    /// `settings.load()` 把存下来的值读进来**——只有存储值与默认值 `.system` 不同时，
+    /// 后者的 `load()` 才构成一次真实变化，`settings.recognitionLanguage` 的
+    /// `.onChange` 也才会真触发一次（从没改过这项设置的用户，`load()` 写回的还是
+    /// `.system`，值没变，回调根本不发生）。前者需要补一次预热；后者由 `.task`
+    /// 里那次负责。不区分的话，存储值非 `.system` 的用户每次冷启动会预热两遍。
     @State private var appliedRecognitionLanguage: RecognitionLanguage?
 
     private static let logger = Logger(
@@ -161,10 +162,12 @@ struct ContentView: View {
             // 换语言必须**先于**预热：`prewarm()` 最终走到 `recognize`，读的是当时生效的
             // `languages`；顺序反了就是拿旧语言去预热，等于没热。
             applyRecognitionLanguages()
-            // 冷启动那次 `load()` 也会走到这里（`.system` → 存储值本身就是一次变化），
-            // 那不是用户操作，预热归上面的 `.task`。只对运行中的真实变更补一次预热，
-            // 且每次变更恰好一次：这里判的是「和已经生效的值不同」，用户在两个选项间
-            // 来回切，每一次都会预热。
+            // 冷启动那次 `load()` **只有**在存储值与默认值 `.system` 不同时才会走到这里
+            // ——那时 `.system` → 存储值是一次真实变化，但那是读设置、不是用户操作，
+            // 预热归上面的 `.task`。从没改过这项设置的用户写回的还是 `.system`，值没变，
+            // `onChange` 压根不触发，他也同样只由 `.task` 预热一次。所以这里只对运行中的
+            // 真实变更补一次预热，且每次变更恰好一次：判的是「和已经生效的值不同」，
+            // 用户在两个选项间来回切，每一次都会预热。
             if let applied = appliedRecognitionLanguage, applied != newValue {
                 coordinator.prewarm()
             }

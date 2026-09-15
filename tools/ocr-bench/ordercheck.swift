@@ -72,7 +72,7 @@ if pairY[0] == pairY[1] {
     failures += 1
 }
 
-// 1. 平局时左栏在前（gen-image 的 two-column 版式断言的就是这条）
+// 1. 平局时左栏在前（几何取自 gen-image 的 two-column 版式；断言的是本文件，不是那张图）
 expect(order(sameBaselinePair()), ["左栏标题", "右栏标题"], "同基线：左栏在前")
 
 // 2. 把输入顺序倒过来，结果必须一样——顺序是排出来的，不是碰巧留下的

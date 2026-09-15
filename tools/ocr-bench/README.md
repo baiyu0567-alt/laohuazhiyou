@@ -52,7 +52,7 @@ PresbyFriend 的 iOS 版用 Vision 做图片 OCR。它的失败模式很隐蔽�
 
 ```sh
 ./bin/gen-image /tmp              # 单栏说明书 → test_image.png
-./bin/gen-image /tmp two-column   # 两栏同基线 → test_image_two_column.png（给 ordercheck 用）
+./bin/gen-image /tmp two-column   # 两栏同基线 → test_image_two_column.png（给人工验，ordercheck 不读它）
 ```
 
 第二个参数选版式，默认 `single`。同时会打印 `.accurate` 与 `.fast` 两档各自支持的语言清单。

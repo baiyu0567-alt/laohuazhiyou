@@ -139,7 +139,7 @@ func reportLanguages() {
 
 let outDir = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "."
 // 第二个参数选版式：single（默认，单栏说明书）或 two-column（两栏同基线，
-// 给 ordercheck 用）。
+// 给人工用 ./bin/ocr 验——ordercheck 用的是同几何的合成坐标，不读这张图）。
 let layout = CommandLine.arguments.count > 2 ? CommandLine.arguments[2] : "single"
 reportLanguages()
 
