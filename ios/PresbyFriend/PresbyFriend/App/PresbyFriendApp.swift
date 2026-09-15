@@ -156,7 +156,9 @@ struct ContentView: View {
                 ZoomableImageView(image: source.uiImage)
                     .ignoresSafeArea()
                 VStack {
-                    Text(L10n.ocrNoText)
+                    // 识别失败要说「读不出来」，不能拿「没有文字」搪塞——两者都走
+                    // 这张兜底原图，只有文案能区分。
+                    Text(coordinator.recognitionFailed ? L10n.ocrFail : L10n.ocrNoText)
                         .font(.title3)
                         .multilineTextAlignment(.center)
                         .padding(12)

@@ -66,6 +66,8 @@ enum L10n {
     static var photoLoadFail: String { NSLocalizedString("photo_load_fail", comment: "") }
     static var ocrPreparing: String { NSLocalizedString("ocr_preparing", comment: "") }
     static var ocrNoText: String { NSLocalizedString("ocr_no_text", comment: "") }
+    /// 识别**失败**（Vision 抛错），与「这张图里确实没有文字」是两回事。
+    static var ocrFail: String { NSLocalizedString("ocr_fail", comment: "") }
     static var ocrLanguage: String { NSLocalizedString("ocr_language", comment: "") }
     static var ocrLanguageDesc: String { NSLocalizedString("ocr_language_desc", comment: "") }
     static var ocrLanguageSystem: String { NSLocalizedString("ocr_language_system", comment: "") }

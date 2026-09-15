@@ -22,6 +22,7 @@
 "magnifier_tab" = "Lupe";
 "no_shared_content" = "Kein geteilter Inhalt gefunden";
 "no_text_found" = "Kein Text auf diesem Bildschirm gefunden";
+"ocr_fail" = "Der Text in diesem Bild konnte nicht gelesen werden";
 "ocr_language" = "Erkennungssprache";
 "ocr_language_chinese" = "Chinesisch";
 "ocr_language_desc" = "Wählen Sie die Sprache des fotografierten Textes. Die falsche Wahl lässt die Erkennung unbemerkt fehlschlagen.";

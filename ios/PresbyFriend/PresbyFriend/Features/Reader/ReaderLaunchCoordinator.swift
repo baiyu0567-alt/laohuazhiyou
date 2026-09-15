@@ -21,6 +21,13 @@ final class ReaderLaunchCoordinator: ObservableObject {
     /// OCR 没认出文字时的兜底：直接显示原图（只支持缩放）。
     @Published var fallbackImage: OCRImageSource?
 
+    /// OCR **抛错**，而不是「这张图里确实没有文字」。
+    ///
+    /// 两者都会走 `fallbackImage` 兜底，但文案必须分开：识别失败却告诉用户
+    /// 「没有文字」是在说谎。用最小的 `Bool` 表达这个二值信号，和 `isPreparing`
+    /// / `isPresenting` 保持同一种风格。
+    @Published var recognitionFailed = false
+
     private let ocr = TextRecognitionService()
 
     /// 每次发起或取消都自增。OCR 完成时对不上就说明这次结果已经过期。
@@ -49,6 +56,8 @@ final class ReaderLaunchCoordinator: ObservableObject {
         // 文本直接有了，不需要等 OCR：作废在途的那次，别让它回来覆盖。
         generation += 1
         isPreparing = false
+        // 文本路径没有识别动作，失败标志必须归零，否则会继承上一次 OCR 的状态。
+        recognitionFailed = false
         fallbackImage = nil
         self.text = trimmed
         isPresenting = true
@@ -59,22 +68,34 @@ final class ReaderLaunchCoordinator: ObservableObject {
         let token = generation
 
         isPreparing = true
+        recognitionFailed = false
         // 只有仍然是「当前这一次」时才由自己收尾，否则会把后来者的转圈关掉。
         defer { if token == generation { isPreparing = false } }
 
-        let blocks = (try? await ocr.recognize(source)) ?? []
+        // 这里不能再用 `try?`：它把 Vision 的抛错折成 `[]`，和「这张图真的没有文字」
+        // 撞成同一个值，于是失败会被当成空结果报给用户。两种结果必须留下不同的痕迹。
+        let blocks: [RecognizedBlock]
+        var failed = false
+        do {
+            blocks = try await ocr.recognize(source)
+        } catch {
+            blocks = []
+            failed = true
+        }
         let joined = blocks.map(\.text).joined(separator: "\n")
 
         // 等待期间用户可能已经关掉、或又开了别的。过期的结果一律不许放行。
         guard token == generation else { return }
 
-        if joined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            // 空结果不算错误：兜底显示原图，让用户自己放大看。
-            text = nil
-            fallbackImage = source
-        } else {
+        recognitionFailed = failed
+        if !failed, !joined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             text = joined
             fallbackImage = nil
+        } else {
+            // 空结果不算错误（图里确实没文字），识别失败也不算：两者都兜底显示原图，
+            // 让用户自己放大看。区别只在文案，交给 UI 按 `recognitionFailed` 选。
+            text = nil
+            fallbackImage = source
         }
         isPresenting = true
     }
@@ -84,6 +105,7 @@ final class ReaderLaunchCoordinator: ObservableObject {
         generation += 1
         isPresenting = false
         isPreparing = false
+        recognitionFailed = false
         text = nil
         fallbackImage = nil
     }

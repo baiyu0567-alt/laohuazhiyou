@@ -22,6 +22,7 @@
 "magnifier_tab" = "Loupe";
 "no_shared_content" = "Aucun contenu partagé trouvé";
 "no_text_found" = "Aucun texte trouvé sur cet écran";
+"ocr_fail" = "Impossible de lire le texte de cette image";
 "ocr_language" = "Langue de reconnaissance";
 "ocr_language_chinese" = "Chinois";
 "ocr_language_desc" = "Choisissez la langue du texte photographié. Un mauvais choix fait échouer la reconnaissance en silence.";

@@ -22,6 +22,7 @@
 "magnifier_tab" = "Lupa";
 "no_shared_content" = "No se encontró contenido compartido";
 "no_text_found" = "No se encontró texto en esta pantalla";
+"ocr_fail" = "No se pudo leer el texto de esta imagen";
 "ocr_language" = "Idioma de reconocimiento";
 "ocr_language_chinese" = "Chino";
 "ocr_language_desc" = "Elige el idioma del texto que fotografías. Elegir mal hace que el reconocimiento falle en silencio.";

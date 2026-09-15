@@ -22,6 +22,7 @@
 "magnifier_tab" = "Lente";
 "no_shared_content" = "Nessun contenuto condiviso trovato";
 "no_text_found" = "Nessun testo trovato su questa schermata";
+"ocr_fail" = "Impossibile leggere il testo in questa immagine";
 "ocr_language" = "Lingua di riconoscimento";
 "ocr_language_chinese" = "Cinese";
 "ocr_language_desc" = "Scegli la lingua del testo che fotografi. Scegliere quella sbagliata fa fallire il riconoscimento in silenzio.";

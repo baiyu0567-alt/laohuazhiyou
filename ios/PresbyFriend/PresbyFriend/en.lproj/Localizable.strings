@@ -22,6 +22,7 @@
 "magnifier_tab" = "Magnifier";
 "no_shared_content" = "No shared content found";
 "no_text_found" = "No text found on this screen";
+"ocr_fail" = "Could not read the text in this picture";
 "ocr_language" = "Recognition language";
 "ocr_language_chinese" = "Chinese";
 "ocr_language_desc" = "Choose the language of the text you photograph. Picking the wrong one makes recognition fail silently.";
