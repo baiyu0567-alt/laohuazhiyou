@@ -205,8 +205,21 @@ struct ContentView: View {
                     }
                 } catch {
                     Self.logger.error("URL extraction failed for \(url.absoluteString, privacy: .public): \(String(describing: error))")
-                    // 抛错同样是「用户分享了、什么都没发生」。**但取消不是失败**：任务被取消时
-                    // `extract` 会抛 CancellationError，那不是错误，不该弹窗。
+                    // 抛错同样是「用户分享了、什么都没发生」。
+                    //
+                    // **但取消不是失败。** 下面两个合取项分工不同，都不许当成死代码删掉：
+                    //   - `error is CancellationError`：在本路径上**匹配不到任何东西**。
+                    //     `extract` 唯一的挂起点是 `URLExtractor.swift:23` 的
+                    //     `URLSession.shared.data(from:)`，全文件没有一处 `Task.checkCancellation()`；
+                    //     而 URLSession 报取消用的是 `URLError(.cancelled)`（NSURLError −999），
+                    //     不是 `CancellationError`。
+                    //   - `!Task.isCancelled`：**真正会拦下取消的是这一半**——它读的是当前任务的
+                    //     取消位，与抛出来的具体错误类型无关。
+                    //
+                    // 今天没有任何东西持有这个非结构化 `Task` 的句柄，所以它不会被取消，这个守卫
+                    // 恒为真——这正是我们要的行为。留着 `!Task.isCancelled` 是因为：**一旦日后有改动
+                    // 让这个任务变得可取消，删掉它就等于把这道守卫要防的那个行为重新装回去**
+                    // （任务被取消 → 弹一个「提取失败」，而用户并没有失败）。
                     if !(error is CancellationError) && !Task.isCancelled {
                         showingURLExtractError = true
                     }
@@ -254,10 +267,26 @@ struct ContentView: View {
             // `fallbackImage` 还没被赋值）和 `open(text:)`（`fallbackImage = nil` 执行完时
             // `self.text` 还没被赋值）。
             //
-            // 其中**够得着的是后者**：阅读页已经开着时从外部进来一个 URL，走 `onOpenURL`
-            // → `settings.pendingURL` → 下面那个 `.onChange` → `open(text:)`，此时
-            // `isPresenting` 已经是 true。前者要在阅读页开着时调起 `open(image:)`，而那条路
-            // 被全屏遮罩挡着（放大镜快门和读取 tab 都在它下面）。
+            // 两条路径的可达性都**没有得到支持**，所以这条兜底是防御性的。
+            //
+            // 这里曾经写着「够得着的是后者」——阅读页已经开着时从外部进来一个 URL，走
+            // `onOpenURL` → `settings.pendingURL` → 下面那个 `.onChange` → `open(text:)`，
+            // 此时 `isPresenting` 已经是 true。**这个说法站不住**：
+            // `settings.pendingURL` 全树只有一个写者，就是 `:43` 的 `onOpenURL`；而本 App
+            // **没有注册任何 URL 路由**——`CFBundleURLTypes`（自定义 scheme）和
+            // `CFBundleDocumentTypes` 在 `project.pbxproj` 里根本不存在，在**构建产物**的
+            // `PresbyFriend.app/Info.plist` 上实测也都是 "Does Not Exist"。没有 scheme、
+            // 没有文档类型，iOS 就无法用 URL 把本 App 打开，`onOpenURL` 也就没有入口。
+            //
+            // 但**不能**由此说成「不可达」：本 App 确实还有一条 Siri/活动 面——app target 的
+            // 构建设置声明了 `INFOPLIST_KEY_NSUserActivityTypes`（`project.pbxproj:364/:401`，
+            // 两个活动类型），`:114` 也挂了 `.onContinueUserActivity`。那条路能不能把 URL
+            // 送进来，**没有设备无法断定**。可以确定的只有：`:114` 的处理闭包只切 tab
+            // （`router.selectedTab = 0`），从不写 `pendingURL`，所以它不构成 `pendingURL`
+            // 的来源。（另一处实测：该键并未出现在构建产物的 Info.plist 里。）
+            //
+            // 前者（阅读页开着时调起 `open(image:)`）则被全屏遮罩挡着（放大镜快门和读取 tab
+            // 都在它下面）。
             //
             // 两条之所以都看不见，只是因为主 actor 上两条相邻语句之间插不进一次渲染
             // ——这个性质没有任何东西在保证，中间多一个 `await` 就会漏出来。
