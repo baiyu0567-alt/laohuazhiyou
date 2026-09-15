@@ -80,6 +80,43 @@ func makeTestImage(width: Int, height: Int) -> CGImage? {
     return cictx.createCGImage(noise, from: ci.extent) ?? base
 }
 
+// 两栏版：左右两块标题画在**同一条基线**上（同一个 y）。
+// 用来逼出 `TextRecognitionService.blocks(from:)` 里 `origin.y` 相等的那条平局分支——
+// 不按 minX 破平局，顺序就会随运行而变（`sorted(by:)` 不保证稳定）。
+// x 坐标与 ordercheck 驱动里的归一化坐标对应：60/1200 = 0.05，660/1200 = 0.55。
+func makeTwoColumnImage(width: Int, height: Int) -> CGImage? {
+    let cs = CGColorSpaceCreateDeviceRGB()
+    guard let ctx = CGContext(data: nil, width: width, height: height,
+                              bitsPerComponent: 8, bytesPerRow: 0,
+                              space: cs,
+                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+
+    ctx.setFillColor(CGColor(red: 0.87, green: 0.86, blue: 0.82, alpha: 1))
+    ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
+
+    let textColor = CGColor(red: 0.28, green: 0.27, blue: 0.25, alpha: 1)
+
+    let columns: [(String, CGFloat)] = [
+        ("左栏标题", 60),
+        ("右栏标题", 660),
+    ]
+
+    let y = CGFloat(height) / 2
+    for (text, x) in columns {
+        let font = CTFontCreateWithName("PingFang SC" as CFString, 26, nil)
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: textColor,
+        ]
+        let attr = NSAttributedString(string: text, attributes: attrs)
+        let line = CTLineCreateWithAttributedString(attr)
+        ctx.textPosition = CGPoint(x: x, y: y)
+        CTLineDraw(line, ctx)
+    }
+
+    return ctx.makeImage()
+}
+
 // ── 报告两档各自支持的语言 ──
 
 func reportLanguages() {
@@ -101,15 +138,35 @@ func reportLanguages() {
 // ── main ──
 
 let outDir = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "."
+// 第二个参数选版式：single（默认，单栏说明书）或 two-column（两栏同基线，
+// 给 ordercheck 用）。
+let layout = CommandLine.arguments.count > 2 ? CommandLine.arguments[2] : "single"
 reportLanguages()
 
 let W = 1200, H = 900
-guard let img = makeTestImage(width: W, height: H) else {
-    print("❌ 测试图生成失败")
+let fileName: String
+let img: CGImage
+switch layout {
+case "single":
+    fileName = "test_image.png"
+    guard let made = makeTestImage(width: W, height: H) else {
+        print("❌ 测试图生成失败")
+        exit(1)
+    }
+    img = made
+case "two-column":
+    fileName = "test_image_two_column.png"
+    guard let made = makeTwoColumnImage(width: W, height: H) else {
+        print("❌ 测试图生成失败")
+        exit(1)
+    }
+    img = made
+default:
+    print("❌ 未知版式: \(layout)（可选 single / two-column）")
     exit(1)
 }
 
-let outPath = (outDir as NSString).appendingPathComponent("test_image.png")
+let outPath = (outDir as NSString).appendingPathComponent(fileName)
 if let dest = CGImageDestinationCreateWithURL(
     URL(fileURLWithPath: outPath) as CFURL, "public.png" as CFString, 1, nil) {
     CGImageDestinationAddImage(dest, img, nil)
