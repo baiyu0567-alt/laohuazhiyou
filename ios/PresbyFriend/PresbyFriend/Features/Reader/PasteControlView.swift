@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
+import OSLog
 
 /// `UIPasteControl` 的 SwiftUI 包装。
 ///
@@ -50,7 +51,17 @@ struct PasteControlView: UIViewRepresentable {
         override func paste(itemProviders: [NSItemProvider]) {
             for provider in itemProviders
             where provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
-                provider.loadItem(forTypeIdentifier: UTType.plainText.identifier) { item, _ in
+                provider.loadItem(forTypeIdentifier: UTType.plainText.identifier) { item, error in
+                    if let error {
+                        // 以前这里写的是 `_`，粘贴失败就彻底没有痕迹（和 `ReadTabView` 里
+                        // 修掉的 `try?` 是同一类）。用户看到的仍然只是「点了没反应」，
+                        // 但排查至少留得下线索。Logger 就地构造：这个回调不在主线程上，
+                        // 所以不引入任何需要隔离的共享状态。
+                        Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.presbyfriend",
+                               category: "paste")
+                            .error("Paste failed: \(String(describing: error))")
+                        return
+                    }
                     let text = (item as? String)
                         ?? (item as? Data).flatMap { String(data: $0, encoding: .utf8) }
                     guard let text, !text.isEmpty else { return }

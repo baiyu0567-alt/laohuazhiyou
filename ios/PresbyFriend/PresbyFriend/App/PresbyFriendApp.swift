@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import OSLog
 
 // MARK: - Siri Shortcut Activity Types
 
@@ -60,7 +61,9 @@ struct ContentView: View {
     @StateObject private var router = TabRouter()
     @StateObject private var coordinator = ReaderLaunchCoordinator()
 
-    @Environment(\.scenePhase) private var scenePhase
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "com.presbyfriend",
+        category: "url-extract")
 
     var body: some View {
         ZStack {
@@ -142,7 +145,9 @@ struct ContentView: View {
                     if text.count > 50 {
                         coordinator.open(text: text)
                     }
-                } catch {}
+                } catch {
+                    Self.logger.error("URL extraction failed for \(url.absoluteString, privacy: .public): \(String(describing: error))")
+                }
             }
         }
     }
@@ -167,6 +172,27 @@ struct ContentView: View {
                         .padding()
                     Spacer()
                 }
+                VStack {
+                    Spacer()
+                    Button(L10n.close) { coordinator.close() }
+                        .font(.title2)
+                        .buttonStyle(.borderedProminent)
+                        .padding(.bottom, 32)
+                }
+            }
+        } else {
+            // `isPresenting` 为真、两条内容路径却都为空：不能留一块没有出口的全屏空白——
+            // 阅读页是 ZStack 里盖住 TabView 的视图，不是 sheet，没有下滑关闭的手势，
+            // 这个 App 的用户没有别的方式退出。
+            //
+            // 今天渲染不到：`isPresenting` 只在 `open(text:)` / `open(image:)` 里置为 true，
+            // 而这两处都在同一次「先填内容、后置标志」的同步执行里完成。但 `open(image:)`
+            // 的兜底分支确实会**瞬时**经过这个状态（`text = nil` 执行完时 `fallbackImage`
+            // 还没被赋值），之所以看不见只是因为在主 actor 上两条相邻语句之间插不进一次
+            // 渲染——这个性质没有任何东西在保证，中间多一个 `await` 就会漏出来。
+            // 代价是十行兜底，收益是永远不会把用户困在黑屏上。
+            ZStack {
+                Color.black.ignoresSafeArea()
                 VStack {
                     Spacer()
                     Button(L10n.close) { coordinator.close() }

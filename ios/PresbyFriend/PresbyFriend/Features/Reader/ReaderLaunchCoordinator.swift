@@ -1,5 +1,4 @@
 import SwiftUI
-import CoreGraphics
 import Combine
 
 /// 送进阅读模式的内容。

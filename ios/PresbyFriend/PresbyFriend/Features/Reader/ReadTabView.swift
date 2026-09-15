@@ -1,6 +1,5 @@
 import SwiftUI
 import PhotosUI
-import UIKit
 import OSLog
 
 /// 「读取」tab：老花眼用户最高频的动作，值得一整屏、值得把按钮做大。
@@ -51,7 +50,7 @@ struct ReadTabView: View {
 
             Text(L10n.pasteHint)
                 .font(.system(size: 18))
-                .foregroundColor(.secondary)
+                .foregroundColor(.primary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(24)
@@ -74,7 +73,7 @@ struct ReadTabView: View {
 
             Text(photoError ?? L10n.pickPhotoHint)
                 .font(.system(size: 18))
-                .foregroundColor(photoError == nil ? .secondary : .red)
+                .foregroundColor(photoError == nil ? .primary : .red)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(24)
