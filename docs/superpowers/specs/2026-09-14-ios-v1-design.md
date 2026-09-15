@@ -53,7 +53,7 @@ Android 的核心能力是「在任何 app 里读字」，靠 `AccessibilityServ
 ## 关键实证发现
 
 这些结论来自本次在 macOS 上对 `VNRecognizeTextRequest` 的实测（iOS 与 macOS 同一套 API）。
-实验脚本保留在 `/tmp/ocrtest/`（`compare.swift`、`cold.swift`、`ocr.swift`），可复跑。
+实验脚本已收进仓库 `tools/ocr-bench/`（`./build.sh` 编译，`./bin/compare` 等），可随时复跑。
 
 ### 发现 1：语言模型的第一个元素决定用哪个模型，选错则完全崩溃
 
@@ -80,7 +80,7 @@ Android 的核心能力是「在任何 app 里读字」，靠 `AccessibilityServ
 
 | 档位 | 支持语言 |
 |---|---|
-| `.accurate` | 32 种，含 `zh-Hans`/`zh-Hant`/`yue-Hans`/`ja-JP`/`ko-KR` |
+| `.accurate` | 33 种，含 `zh-Hans`/`zh-Hant`/`yue-Hans`/`ja-JP`/`ko-KR` |
 | `.fast` | 只有 en/fr/it/de/es/pt |
 
 实测 `.fast` 对中文图返回 **0 个结果**。因此任何「为实时性降档」的方案在中文场景直接失效。
