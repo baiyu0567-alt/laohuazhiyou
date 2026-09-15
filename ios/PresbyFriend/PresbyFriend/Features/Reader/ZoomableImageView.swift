@@ -7,7 +7,8 @@ import UIKit
 /// 平滑的捏合 + 平移 + 回弹，不用自己维护缩放锚点和边界。
 struct ZoomableImageView: UIViewRepresentable {
     let image: UIImage
-    /// 最小缩放。默认 1 表示「适应屏幕」，用户可以往外捏。
+    /// 最小缩放。默认 1 表示「适应屏幕」，同时也是允许的最小值——再往外捏会被
+    /// `minimumZoomScale` 夹住，不会缩得更小。
     var minimumZoomScale: CGFloat = 1.0
     var maximumZoomScale: CGFloat = 8.0
 
@@ -27,7 +28,7 @@ struct ZoomableImageView: UIViewRepresentable {
         scrollView.addSubview(imageView)
         context.coordinator.imageView = imageView
 
-        // 双击放大到 2 倍 / 还原。比拇指捏合更容易被老花眼用户发现。
+        // 双击放大到 2.5 倍 / 还原。比拇指捏合更容易被老花眼用户发现。
         let doubleTap = UITapGestureRecognizer(
             target: context.coordinator,
             action: #selector(Coordinator.handleDoubleTap(_:)))
@@ -64,10 +65,9 @@ struct ZoomableImageView: UIViewRepresentable {
         /// 传进来的图跟当前显示的图是不是同一张。
         ///
         /// **不能只看 `UIImage` 的实例同一性。** `UIImage(cgImage:)` 每次调用都分配
-        /// 一个新的包装对象，而两个调用方都是在 view body 里现构造的
-        /// （`OCRImageSource.uiImage` 是计算属性、`UIImage(cgImage: source.image)`
-        /// 直接就 new），所以 `!==` 每次都为真——重绘又会把用户的缩放抹掉。
-        /// 它们包的却是同一个 `CGImage` 实例，所以比较里层。
+        /// 一个新的包装对象，而调用方是在 view body 里现构造的
+        /// （`OCRImageSource.uiImage` 是计算属性，每次访问都新建一个），
+        /// 所以 `!==` 每次都为真——重绘又会把用户的缩放抹掉。
         ///
         /// 先用实例同一性短路（调用方若自己缓存了 `UIImage`，这一步就够了，也最省）。
         ///
@@ -94,13 +94,22 @@ struct ZoomableImageView: UIViewRepresentable {
         /// 短暂低于最小值，但 transform 已经存在）。
         func isAtBaseScale(in scrollView: UIScrollView) -> Bool {
             guard let imageView else { return false }
+            // 倍率这一项的基准是「铺满视口的那个倍率」，不是 `minimumZoomScale`：
+            // 新建出来的 `UIScrollView` 一律报告 `zoomScale == 1.0`，哪怕
+            // `minimumZoomScale` 被设成 < 1（实测于模拟器：设 0.5 后仍是 1.0）。
+            // 拿 `minimumZoomScale` 当上限，基础态就会被判成「已缩放」，
+            // `updateUIView` 永远不调 `layout`，`contentSize` 停在 .zero——整块空白。
+            // 取 `max(_, 1.0)` 则两种配置都对：min ≤ 1 时基准是 1.0（未缩放），
+            // min > 1 时基准就是 min（铺不满，最小倍率即基础态）。
+            // 放宽这一项不会误判已缩放：真正缩放时被缩放的子视图带着非 identity 的
+            // transform，上面那一项已经为假（实测：min=0.5 时缩到 2.5 / 0.7 / 0.5
+            // 三种情况 transform 均非 identity，predicate 均为假）。
             return imageView.transform.isIdentity
-                && scrollView.zoomScale <= scrollView.minimumZoomScale + 0.0001
+                && scrollView.zoomScale <= max(scrollView.minimumZoomScale, 1.0) + 0.0001
         }
 
         func layout(in scrollView: UIScrollView) {
             guard let imageView else { return }
-            scrollView.frame = scrollView.bounds
             // 用 bounds + center 而不是 frame：即便万一在 transform 存在时被调到，
             // 这两个属性仍是良定义的。
             imageView.bounds = CGRect(origin: .zero, size: scrollView.bounds.size)
