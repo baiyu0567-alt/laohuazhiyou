@@ -44,9 +44,16 @@ final class TextRecognitionService {
 
     /// 最近一次**真的跑完**预热的语言组。`nil` = 还没预热过。
     ///
-    /// 同样由 `languagesLock` 保护——那是 `languages` 已经在用的那把锁，这里只是
-    /// 共用它，不新开第二套同步机制：两者本来就只在预热这一个动作里一起被读写。
-    /// 存取都是数组比较/赋值的 O(1)，不会像 `queue.sync` 那样被 28–34s 的预热挡住。
+    /// 同样由 `languagesLock` 保护——那是 `languages` 已经在用的那把锁，这里只是共用它，
+    /// 不新开第二套同步机制。共用的只是**锁**，不是「只在预热里被读写」：`storedLanguages`
+    /// 还经 `languages` 的 getter 被 `recognize(_:)` 读、经 setter 被
+    /// `ReaderLaunchCoordinator.updateLanguages` 写，两者都不在 `prewarm()` 里；预热专属的
+    /// 只有这个 `warmedLanguages`。
+    ///
+    /// 存取本身很轻：赋值 O(1)，比较是一次 `[String]` 相等——那是 O(n)，n 为元素个数；
+    /// 而 `RecognitionLanguage.visionLanguages` 每个分支都只返回**一个**元素
+    /// （`RecognitionLanguage.swift:26-34`），n ≤ 1，所以实际是常数级。都只是一把锁下的
+    /// 临界区，不会像 `queue.sync` 那样被 28–34s 的预热挡住。
     private var warmedLanguages: [String]?
 
     private let languagesLock = NSLock()
@@ -119,15 +126,32 @@ final class TextRecognitionService {
     /// 已知局限：这是尽力而为，失败静默吞掉；且「首次慢到底是网络下载还是本地编译」
     /// 尚未验证（见设计文档「已决事项 2」），若依赖网络则无网时会退化为按快门才等。
     ///
-    /// **按语言组幂等**：同一组语言重复请求不再重复预热。这盖住的是「**同一份**数组
-    /// 被请求两次」这一类重复——`ContentView` 因 `.id(languageManager.current)`
-    /// （`PresbyFriendApp.swift:37`）重建时整个子树会重跑一遍 `.task`，以及将来任何
-    /// 新加的调用点，都不必再靠调用顺序去躲。
+    /// **按语言组幂等**：同一个实例上，同一组语言的重复请求会被 `hasWarmed` 跳过；
+    /// 但只在头一次**跑完之后**到达才拦得住——`hasWarmed` 的检查与结尾的 `markWarmed`
+    /// 之间横跨整次 `recognize`，落在预热进行中的第二次调用照样通过那道 guard。
+    /// 真正走得到的场景是同数组的**偏好切换**：英文系统下 `.system` 与 `.english` 都
+    /// 解析成 `["en-US"]`（`RecognitionLanguage.swift:26-34`），两者互切请求的是同一份数组。
+    ///
+    /// **它盖不住 `ContentView` 重建之后的那次预热**：`.id(languageManager.current)` 是
+    /// 加在 `ContentView()` **外面**的（`PresbyFriendApp.swift:35-37`，App 的 `WindowGroup`），
+    /// 换语言摧毁重建的是 `ContentView` 自己，它的
+    /// `@StateObject private var coordinator = ReaderLaunchCoordinator()`（:62）随之重来——
+    /// 新 coordinator、新 `TextRecognitionService`、`warmedLanguages` 又是 `nil`，重建后的
+    /// `.task` 照样热一遍。新实例还带着自己的 `queue`，所以它与旧实例在途的那次 `recognize`
+    /// **不互相串行**（旧实例被 `ReaderLaunchCoordinator.prewarm` 里的 `let service` 拽住，
+    /// 活到那次调用结束）。代价是时间，不是正确性：只有正好落在首次预热那 28–34s 之内才
+    /// 显著，首次跑完之后同语言的再热就是上面实测的 0.1–0.35s。
     ///
     /// **它不覆盖「两份不同的数组」**：语言真的不一样就必然各热一次，这正是「绝不把
-    /// 选中的模型晾冷」所要求的（A→B→A 三次都要热）。所以启动路径上「只热一遍」不是
-    /// 这里保证的——那是 `ContentView.task` 先做 `settings.load()` 保证的。
-    /// 判据是「和上次真的热过的那一组逐字相同」，其余一律偏向再热一次。
+    /// 选中的模型晾冷」所要求的——判据只认「和上次真的热过的那一组逐字相同」，其余一律
+    /// 偏向再热一次（A→B→A 三次都要热）。
+    ///
+    /// **启动路径上它不是承重的那一根**：冷启动「只热一遍」由 `.task` 顶部那次
+    /// `settings.load()` 与 `appliedRecognitionLanguage` 那道闸负责
+    /// （`PresbyFriendApp.swift:155-158`、`:171`），与这里的幂等无关——三处各拦一类重复：
+    /// `load()` 让 `.task` 那次就热存储值（否则 `.task` 热 `.system`、随后的 `onChange`
+    /// 热存储值，两份不同的数组，这里的幂等拦不住），那道闸拦掉启动时重复的 `onChange`，
+    /// 本幂等只拦同一实例上跑完之后的同数组重复。
     func prewarm() async {
         // 快照一次：这次拿来预热的、以及跑完记下的，必须是同一个值。
         let languages = self.languages
