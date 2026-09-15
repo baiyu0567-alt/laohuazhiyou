@@ -19,8 +19,15 @@ struct ShareView: View {
                         .font(.title3)
                 }
             } else if let text {
-                ReaderView(text: text, paragraphs: paragraphs, onClose: { dismiss() })
-                    .environmentObject(settings)
+                // ReaderView 不自带导航容器：它的 .navigationTitle/.toolbar 只是
+                // 往祖先容器上挂，没有容器这三个工具项（关闭、字号面板、朗读）
+                // 就一个都渲染不出来。分享扩展这条路径上没有任何系统导航栏
+                // （ShareViewController 只做 UIViewController 容器），所以要在这里
+                // 自己提供——与 App 内 PresbyFriendApp.swift:120-125 的包法一致。
+                NavigationStack {
+                    ReaderView(text: text, paragraphs: paragraphs, onClose: { dismiss() })
+                        .environmentObject(settings)
+                }
             } else if let error {
                 VStack(spacing: 16) {
                     Image(systemName: "exclamationmark.triangle").font(.largeTitle)
