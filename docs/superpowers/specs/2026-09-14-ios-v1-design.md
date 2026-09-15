@@ -416,8 +416,9 @@ iOS 16 起，程序化读 `UIPasteboard.general` 会弹系统对话框
 且该文件因 Task 10 新增 `recognitionLanguage` 监听变为 4 处）。**结论未变**：全树 14 处
 `onChange(of:)` 逐处检查，**均为单参数形式**，无一处使用 iOS 17+ 的
 `onChange(of:initial:_:)`；本机 `grep` 亦未检出其他 iOS 17+ API 用量。当前各点位置：
-`PresbyFriendApp.swift:44/165/181/182`、`ReaderView.swift:56`、`MagnifierView.swift:76`，
-`SettingsView.swift:143-149`（7 处，老式单参数）。
+`PresbyFriendApp.swift:44/165/181/182`（4 处）、`ReadTabView.swift:26`、`ReaderView.swift:56`、
+`MagnifierView.swift:76`、`SettingsView.swift:143-149`（7 处，老式单参数）——
+4+1+1+1+7 = 14，与上句的总数相符。
 
 ### 2. 首次 28s 是下载还是本地编译：**留待真机验证**
 
