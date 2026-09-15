@@ -61,6 +61,24 @@ final class MagnifierViewModel: NSObject, ObservableObject {
 
     let session = AVCaptureSession()
 
+    /// 全部会话操作（配置 + `startRunning()` / `stopRunning()`）**唯一**的执行场所。
+    ///
+    /// **为什么必须是串行、而且是唯一**：`AVCaptureSession` 不支持在多个线程上并发做这些事
+    /// ——Apple 自己的 AVCam 样例就为此专开一把 sessionQueue。以前 `startRunning()` 走的是
+    /// **全局并发**队列、`stopRunning()` 与配置走的是调用者线程（主 actor），三者互不串行：
+    /// 用户进放大镜 tab 后 `startRunning()` 还在阻塞、立刻离开触发 `stopRunning()`，两者就真的
+    /// 撞在同一个 session 上（台账「真机检查表第 13 行」）。
+    ///
+    /// 一把串行队列同时给到两个性质：三者互斥，且 FIFO 保证「先 stop 再 start」的顺序——离开
+    /// tab 又马上回来时正是这个顺序。顺带把主线程从一次阻塞调用（`stopRunning()`）里解放出来。
+    ///
+    /// 与 `TextRecognitionService.queue`、`photoSlot` 的锁都无关，是独立一把：前者串行化的是
+    /// 整段 Vision 请求（首次预热占住 28–34s，见 `prewarm()` 注释），后者保护的是两个小值。
+    /// `qos` 显式给 `.userInitiated`，与改前 `DispatchQueue.global(qos: .userInitiated)` 一致，
+    /// 不要让起相机的延迟退化。
+    private let sessionQueue = DispatchQueue(label: "com.presbyfriend.magnifier.session",
+                                             qos: .userInitiated)
+
     /// 复用正在跑的 session 出图：比再起一套相机 UI 快，用户也不用第二次对准。
     let photoOutput = AVCapturePhotoOutput()
 
@@ -116,32 +134,35 @@ final class MagnifierViewModel: NSObject, ObservableObject {
 
     private func startSession() {
         guard let device else { return }
-        do {
-            let input = try AVCaptureDeviceInput(device: device)
-            session.beginConfiguration()
-            if session.canAddInput(input) { session.addInput(input) }
-            // 在 commitConfiguration 之前挂上输出：配置提交后再改要另开一次配置块。
-            if session.canAddOutput(photoOutput) { session.addOutput(photoOutput) }
-            session.commitConfiguration()
-            // 起这一次的后台块之前先占一个代次，收尾时对不上就丢弃（见 `sessionGeneration`）。
-            sessionGeneration += 1
-            let token = sessionGeneration
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                guard let self else { return }
+        // 代次在主 actor 上自增：`stopSession()` 也在这里自增，两者的读写必须同域
+        // （见 `sessionGeneration` 的注释）。
+        sessionGeneration += 1
+        let token = sessionGeneration
+        sessionQueue.async { [weak self] in
+            guard let self else { return }
+            do {
+                let input = try AVCaptureDeviceInput(device: device)
+                // 配置与 start/stop 同处这把串行队列，理由见 `sessionQueue` 的注释。
+                self.session.beginConfiguration()
+                if self.session.canAddInput(input) { self.session.addInput(input) }
+                // 在 commitConfiguration 之前挂上输出：配置提交后再改要另开一次配置块。
+                if self.session.canAddOutput(self.photoOutput) { self.session.addOutput(self.photoOutput) }
+                self.session.commitConfiguration()
                 self.session.startRunning()
-                // 回主线程再写 `@Published`：这段闭包跑在后台队列上（`startRunning()`
-                // 会阻塞，不能占住主线程），在这里直接赋值就是从后台线程发布一次
-                // SwiftUI 变更。两个 target 的默认隔离不同（见 `isSessionRunning` 的
-                // 注释），所以不靠隔离，统一显式回 `@MainActor` 再写。
+                // 回主线程再写 `@Published`：这段闭包跑在 `sessionQueue` 上（`startRunning()`
+                // 会阻塞，不能占住主线程），在这里直接赋值就是从后台线程发布一次 SwiftUI 变更。
+                // 两个 target 的默认隔离不同（见 `isSessionRunning` 的注释），所以不靠隔离，
+                // 统一显式回 `@MainActor` 再写。
                 Task { @MainActor in
                     guard self.sessionGeneration == token else { return }
                     self.isSessionRunning = true
                 }
+            } catch {
+                // `cameraError` 是 `@Published`，同样要回主 actor 写（理由同上）。
+                Task { @MainActor in self.cameraError = L10n.cameraError }
             }
-            applyZoom()
-        } catch {
-            cameraError = L10n.cameraError
         }
+        applyZoom()
     }
 
     func applyZoom() {
@@ -165,7 +186,10 @@ final class MagnifierViewModel: NSObject, ObservableObject {
     }
 
     func stopSession() {
-        session.stopRunning()
+        // 与 `startRunning()` 走**同一把**串行队列：改前它是在当前线程（主 actor）同步调用的，
+        // 而 `startRunning()` 在全局**并发**队列上——两者可以真的重叠，那是 `AVCaptureSession`
+        // 不支持的用法（见 `sessionQueue` 的注释）。顺带把主线程从这次阻塞调用里解放出来。
+        sessionQueue.async { [weak self] in self?.session.stopRunning() }
         // 会话停了，拍照回调就不再保证会来。不在这里把在途的那一按收掉的话，
         // 它永远不完成，快门会一直停在忙碌态（`isCapturing` 为真）再也按不动。
         photoSlot.finish(with: nil)
