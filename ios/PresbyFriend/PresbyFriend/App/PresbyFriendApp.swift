@@ -140,13 +140,18 @@ struct ContentView: View {
         .task {
             // 启动时后台准备识别模型，避免第一次按快门等 28s。
             //
-            // 「先记下已生效的值、再预热」这个顺序就是上面的闸成立的前提，而它押在一条
-            // 看不见的假设上：`SettingsModel.load()`（在 `body` 的 `.onAppear` 里，先于本
-            // `.task`）会把 `recognitionLanguage` 从 `@Published` 默认的 `.system` 改成存储
-            // 值，所以冷启动时下面那个 `.onChange` 会真触发一次；这里记下的值正是它将要带来
-            // 的新值，那次 onChange 因此不重复预热——冷启动只预热一遍。
-            // 假设若不成立（`load()` 晚于本 `.task`），记下的会是默认值 `.system`，load 之后
-            // 的 onChange 会再预热一次：结果仍然安全，用户选的模型照样是热的，只是白跑一遍。
+            // 先自己把存储的设置读进来，**不再依赖** App 层 `.onAppear` 里那次 `load()`
+            // 先于本 `.task` 到达——SwiftUI 不保证这个顺序，而押在它上面的后果是冷启动
+            // 预热两遍（`.task` 热 `.system` 那组，随后的 onChange 再热存储那组，两份
+            // 不同的数组，`prewarm()` 的按语言组幂等拦不住，见它的注释）。
+            // `load()` 幂等且便宜（只读 UserDefaults 并给 @Published 赋值，见
+            // SettingsModel.swift:20-29），`ShareView` 也已经连着调过两次，所以这里先读
+            // 一次是安全的：读进来之后记下的就是存储值，下面那个 `.onChange` 会被闸挡掉。
+            // `load()` 若真的发布了变化，两种落点都只预热一遍：
+            //   - `.onChange` 在本 `.task` 之前/期间到达：`appliedRecognitionLanguage`
+            //     还是 nil，走 nil 分支只记录不预热，预热由下面这次负责；
+            //   - `.onChange` 在本 `.task` 之后到达：`applied` 已等于新值，被 `!= newValue` 挡掉。
+            settings.load()
             applyRecognitionLanguages()
             appliedRecognitionLanguage = settings.recognitionLanguage
             coordinator.prewarm()
