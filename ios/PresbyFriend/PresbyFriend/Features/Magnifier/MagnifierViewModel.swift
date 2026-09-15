@@ -25,6 +25,16 @@ final class MagnifierViewModel: NSObject, ObservableObject {
     /// 只在主线程写（`capturePhoto()` 经 `MainActor.run`）。
     @Published private(set) var isCapturing = false
 
+    /// 会话是否已经在跑。`startSession()` 把 `startRunning()` 丢到后台队列，返回之后到
+    /// 真正跑起来之间有一小段空窗；那段时间里按快门会命中 `capturePhoto()` 的
+    /// `session.isRunning` 闸直接返回 nil——按钮看起来能用，按下去什么都没发生。
+    /// 用这个标志让快门在那段窗口里显示成不可用。
+    ///
+    /// **只在主线程写**：`startSession()` 的 `startRunning()` 在后台队列上返回，
+    /// 若在那里直接赋值，就是一次从后台线程发布的 SwiftUI 变更（本文件的两个 target
+    /// 默认隔离不同，不能指望隔离帮你拦住），所以那条路径显式回 `@MainActor` 再写。
+    @Published private(set) var isSessionRunning = false
+
     let session = AVCaptureSession()
 
     /// 复用正在跑的 session 出图：比再起一套相机 UI 快，用户也不用第二次对准。
@@ -50,9 +60,16 @@ final class MagnifierViewModel: NSObject, ObservableObject {
     /// 裸读写是数据竞争（与 Task 6 在识别服务的 `languages` 上修的是同一类缺陷），
     /// 而且这个文件在两个 target 里的默认隔离还不一样，靠隔离保护不了。
     ///
-    /// **为什么不用某把队列 + `queue.sync`**：沿用 Task 6 的裁决——那把队列会被
-    /// 首次预热带住 28–34s，`sync` 进去会把调用方冻到那次识别结束，有 watchdog
-    /// 风险。这里保护的只是几个小值，独立的锁足够，且锁内绝不做阻塞调用。
+    /// **为什么是独立的 `NSLock` 而不是某把队列 + `queue.sync`**：与 Task 6 在
+    /// `TextRecognitionService.languages` 上的裁决同一个道理——这里保护的只是两个
+    /// 小值（在途标志 + 待 resume 的 continuation），一把独立的锁就够，而且锁内
+    /// 绝不做任何阻塞调用（`finish` 是解锁之后才 resume 的）。
+    ///
+    /// **别拿「队列会被首次预热带住 28–34s」当这条选择的依据**：那条理由说的是
+    /// `TextRecognitionService.queue`——它串行化的对象是整段 Vision 请求
+    /// （`recognize`），首次 `prewarm` 要占住它 28–34s（见 `prewarm()` 的注释），
+    /// 因此只排除「复用那把队列」这一种做法；本文件跟那个服务没有任何关系，这里
+    /// 自建一把专用队列也不会被预热拖住。（本段以前是错的，已改正。）
     private let photoSlot = PhotoCaptureSlot()
 
     func requestAccess() async {
@@ -83,7 +100,12 @@ final class MagnifierViewModel: NSObject, ObservableObject {
             if session.canAddOutput(photoOutput) { session.addOutput(photoOutput) }
             session.commitConfiguration()
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                self?.session.startRunning()
+                guard let self else { return }
+                self.session.startRunning()
+                // 回主线程再写 `@Published`：这段闭包跑在后台队列上（`startRunning()`
+                // 会阻塞，不能占住主线程），在这里直接赋值就是从后台线程发布一次
+                // SwiftUI 变更——两个 target 的默认隔离不同，靠隔离也拦不住。
+                Task { @MainActor in self.isSessionRunning = true }
             }
             applyZoom()
         } catch {
@@ -122,6 +144,7 @@ final class MagnifierViewModel: NSObject, ObservableObject {
             device.unlockForConfiguration()
         }
         flashlightOn = false
+        isSessionRunning = false
     }
 
     func detectedTextTapped(_ text: String) {
@@ -141,6 +164,9 @@ final class MagnifierViewModel: NSObject, ObservableObject {
         // 在途那次的 continuation：覆盖等于把第一按的 Task 永远挂住（checked
         // continuation 还会额外报「泄漏」误用）。手抖双击正是这条闸要挡的。
         guard photoSlot.begin() else { return nil }
+        // 闸的释放交给 defer：以后在这条 begin() 与 end() 之间插入任何提前返回
+        // （新的 guard / try）都会静默把闸留在占住状态，也就是快门再也按不动。
+        defer { photoSlot.end() }
 
         await MainActor.run { isCapturing = true }
 
@@ -164,7 +190,6 @@ final class MagnifierViewModel: NSObject, ObservableObject {
             photoSlot.finish(with: nil)
         }
 
-        photoSlot.end()
         await MainActor.run { isCapturing = false }
 
         // 解析放在这里、不放拍照回调里：本方法在 app target 是 `@MainActor`、
@@ -246,13 +271,14 @@ extension MagnifierViewModel: AVCapturePhotoCaptureDelegate {
     /// （会话停了、相机被抢占、写盘失败）时 `didFinishProcessingPhoto` 可能根本不来，
     /// 那样单飞闸就永远占着，快门会一直停用。
     ///
-    /// 只在有错时收：成功路径上 `didFinishProcessingPhoto` 已经把数据交出去了，
-    /// 此时槽是空的，`finish` 自然是 no-op；加 `error != nil` 的条件是为了万一回调
-    /// 顺序与本条注释不符时也绝不丢掉一张已经拿到的照片。
+    /// **无条件收尾，不要加 `error != nil` 的判断。** 成功路径上
+    /// `didFinishProcessingPhoto` 已经把 continuation 取走了，槽是空的，`finish`
+    /// 本身就是 no-op；而加上条件之后，唯一被改变的恰好是最坏那种情形：回调顺序若与
+    /// 头文件不符（error 为 nil、`didFinishProcessingPhoto` 又没来），闸就永远不放，
+    /// 用户看到的是一个转圈加一个再也按不动的快门，直到离开这个 tab。
     nonisolated func photoOutput(_ output: AVCapturePhotoOutput,
                                  didFinishCaptureFor resolvedSettings: AVCaptureResolvedPhotoSettings,
                                  error: Error?) {
-        guard error != nil else { return }
         photoSlot.finish(with: nil)
     }
 }

@@ -85,6 +85,9 @@ struct MagnifierView: View {
                     .padding(.horizontal)
 
                     Button {
+                        // 先取消上一个再覆盖句柄：上一个 Task 还挂着 `!Task.isCancelled`
+                        // 交棒闸，句柄一丢就再没人能取消它，闸也就形同虚设。
+                        captureTask?.cancel()
                         captureTask = Task {
                             // `capturePhoto()` 已经用单飞闸挡住重复点击；这里再挡一次
                             // 是取消时的交棒：本 Task 被取消（离开页面）就不再进阅读模式。
@@ -110,7 +113,10 @@ struct MagnifierView: View {
                         .overlay(Circle().stroke(Color.white, lineWidth: 4))
                         .clipShape(Circle())
                     }
-                    .disabled(vm.isCapturing)
+                    // 会话还没跑起来时 `capturePhoto()` 会直接返回 nil（`session.isRunning`
+                    // 闸），按钮却看起来能用——按下没有任何反应。那种窗口期里也要显示成
+                    // 不可用，和「已经按下去了」一样是「看得见的状态」。
+                    .disabled(vm.isCapturing || !vm.isSessionRunning)
                     .accessibilityLabel(L10n.shutter)
 
                     Button {
