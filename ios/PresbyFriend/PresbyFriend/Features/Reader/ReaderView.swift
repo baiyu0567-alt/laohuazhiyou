@@ -53,7 +53,7 @@ struct ReaderView: View {
                         GeometryReader { geo in
                             Color.clear
                                 .onAppear { rulerY = geo.frame(in: .global).minY }
-                                .onChange(of: geo.frame(in: .global).minY) { _, new in
+                                .onChange(of: geo.frame(in: .global).minY) { new in
                                     rulerY = new
                                 }
                         }

@@ -42,7 +42,7 @@ struct PresbyFriendApp: App {
                     languageManager.current = settings.language
                 }
                 .onOpenURL { settings.pendingURL = $0 }
-                .onChange(of: settings.language) { _, lang in
+                .onChange(of: settings.language) { lang in
                     languageManager.current = lang
                 }
         }
@@ -112,11 +112,11 @@ struct ContentView: View {
             }
         }
         .onAppear { checkClipboard() }
-        .onChange(of: scenePhase) { _, phase in
+        .onChange(of: scenePhase) { phase in
             if phase == .active  { checkClipboard() }
             if phase == .background { lastClipboardText = "" }
         }
-        .onChange(of: settings.pendingURL) { _, url in
+        .onChange(of: settings.pendingURL) { url in
             guard let url else { return }
             settings.pendingURL = nil
             Task {

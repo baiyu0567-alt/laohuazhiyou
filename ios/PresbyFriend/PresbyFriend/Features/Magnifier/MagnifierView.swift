@@ -68,7 +68,7 @@ struct MagnifierView: View {
                         Image(systemName: "minus.magnifyingglass")
                             .font(.title3)
                         Slider(value: $vm.zoomLevel, in: 1...8, step: 0.1)
-                            .onChange(of: vm.zoomLevel) { _, _ in vm.applyZoom() }
+                            .onChange(of: vm.zoomLevel) { _ in vm.applyZoom() }
                             .tint(.white)
                         Image(systemName: "plus.magnifyingglass")
                             .font(.title3)
