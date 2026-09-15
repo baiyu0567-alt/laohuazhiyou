@@ -237,7 +237,7 @@ enum ReaderContent {
 | `Features/Reader/ReaderView.swift` | 接受 OCR 来源的内容 |
 | `shareextention/ShareView.swift` | 加图片 OCR 分支；补 `settings.load()`；去掉多余的 `NavigationStack` |
 | `shareextention/Info.plist` | 加 `NSExtensionActivationSupportsImageWithMaxCount` |
-| `project.pbxproj` | 加 `INFOPLIST_KEY_NSPhotoLibraryUsageDescription`；`IPHONEOS_DEPLOYMENT_TARGET` 改为 16.0 |
+| `project.pbxproj` | `IPHONEOS_DEPLOYMENT_TARGET` 改为 16.0（2 处，均在项目级，两个 target 继承）|
 | `App/PresbyFriendApp.swift`、`ReaderView.swift`、`MagnifierView.swift` | 改写 5 处两参数 `onChange`（iOS 17+ → 兼容 16） |
 | 6 个 `Localizable.strings` | 新增字符串（en/de/fr/es/it/pt） |
 
@@ -315,7 +315,27 @@ iOS 16 起，程序化读 `UIPasteboard.general` 会弹系统对话框
 **方案**：改用 `UIPasteControl`（iOS 16+ 系统控件）。用户主动点击即构成「用户意图」，
 不触发弹窗。同时把自动读取整个移除。
 
-**待真机验证**：`UIPasteControl` 的外观与字号能否自定义。若不能，退到「普通按钮 + 接受一次弹窗」。
+**已查证（原「待真机验证」项已可结案）**：`UIPasteControl.Configuration` 只暴露
+`displayMode` / `cornerStyle` / `cornerRadius` / `baseBackgroundColor` / `baseForegroundColor`
+五个属性，**没有字号入口**。系统粘贴控件的文字尺寸不可调。
+
+同时查证了另一条关键事实：**普通按钮里读 `UIPasteboard.general.string`，「每次点击」都会弹**，
+不是只弹一次——Apple 只对系统识别的粘贴手势（`UIPasteControl`、`UIAction.Identifier.paste`
+菜单、⌘V）免弹窗，代码里的自定义 button 与后台读取无法区分。
+
+因此两个选项的真实代价是：
+
+| 方案 | 字体 | 弹窗 |
+|---|---|---|
+| A 普通大字按钮 | 可做到 34pt+，清晰 | **每次粘贴都弹** |
+| B `UIPasteControl` | 系统固定约 17pt，不可调 | 永不弹 |
+
+**选定 B。** 理由：A 的「每次都弹」对这个人群是持续的打断，而 B 的按钮可以整体做大
+（`frame` 给足 + `cornerStyle` 胶囊 + 自定义对比色），点击区域随之变大，只是标签字号固定。
+把大字说明放在卡片上方的标题位（该处是自有文字，字号随意），系统控件作为明确的触发点。
+
+**真机待确认**（降级为体验微调，不再影响方案选择）：大 `frame` 下控件的实际渲染是否居中、
+对比度是否足够。若不满意，退路是 A。
 
 ### OCR 返回空
 
@@ -358,7 +378,7 @@ iOS 16 起，程序化读 `UIPasteboard.general` 会弹系统对话框
 
 | 风险 | 影响 | 缓解 |
 |---|---|---|
-| `UIPasteControl` 外观不可定制 | 按钮做不大，对老花眼不友好 | 真机先验证；退路是普通按钮 |
+| `UIPasteControl` 字号不可调 | 标签文字偏小，对老花眼不友好 | 点击区域靠 `frame` 做大，说明文字放自有标题位；退路是普通按钮 + 每次弹窗 |
 | 首次 OCR 需联网（未验证） | 首次使用体验 | `prewarm()`；若无网则明确提示 |
 | 部署目标下调到 16.0 后，需改写 5 处 `onChange` | 改写引入回归 | 改动机械（两参数 → 单参数），逐处核对 |
 | 根目录与 `ios/` 两份副本漂移 | 改了没生效，难排查 | 保留决定已定；建议加 README 说明 |
@@ -433,6 +453,6 @@ synchronized group，不经过脚本创建的 group 引用，脚本内的路径�
 | 项 | 方法 |
 |---|---|
 | 首次 OCR 是否依赖网络 | 全新安装 + 飞行模式 + 第一次 OCR |
-| `UIPasteControl` 外观/字号能否自定义 | 真机运行，检查能否做成大字按钮 |
+| `UIPasteControl` 大 `frame` 下的实际渲染 | 真机运行，看标签是否居中、对比度是否够 |
 | 剪贴板粘贴是否真的不弹系统对话框 | 从微信复制文本 → 切到 App → 观察 |
 | `DataScannerViewController` 不可用时的降级 | 老设备（A12 以前）上确认 Live Text UI 隐藏而非静默失效 |
