@@ -39,12 +39,33 @@ xcrun --sdk iphonesimulator swiftc -O -o bin/ordercheck bin/main.swift \
 
 printf '\n完成。产物在 bin/\n'
 
-# 能跑就跑一遍。没有 booted 模拟器时明确跳过——不静默吞掉，也不让构建因此失败
+# 能跑就跑一遍。没有 iOS 模拟器时明确跳过——不静默吞掉，也不让构建因此失败
 # （ordercheck 跑不了是环境问题，不是这次编译有问题）。
-if xcrun simctl list devices booted 2>/dev/null | grep -q Booted; then
-    printf '\n运行 ordercheck\n'
-    xcrun simctl spawn booted "$(pwd)/bin/ordercheck"
+#
+# **只挑 iOS 运行时的设备，并拿 UDID 去 spawn。** `simctl list devices booted` 会把
+# **所有**平台已启动的模拟器都列出来——watchOS / tvOS / visionOS 的设备一样标 Booted
+# ——而 `simctl spawn booted` 只从中挑一台。挑中的若不是 iOS，spawn 这个
+# arm64-apple-ios16.0-simulator 产物必然失败，`set -e` 于是让 build.sh 以非零码退出：
+# 一次环境问题被报成「编译失败」。检查不能撒谎，所以这里按运行时分组显式选 iOS 设备。
+#
+# UDID 用**模式**匹配，不按括号切字段：设备名自己就带括号（`iPad Pro 13-inch (M5)`），
+# 按字段取会取到 "M5" 这种名字片段，spawn 一样失败——那只是把一种撒谎换成另一种。
+ios_booted=$(xcrun simctl list devices booted 2>/dev/null | awk '
+    /^-- /              { ios = ($0 ~ /^-- iOS /); next }
+    ios && /\(Booted\)/ {
+        if (match($0, /[0-9A-F][0-9A-F-]{35}/)) { print substr($0, RSTART, RLENGTH); exit }
+    }
+')
+if [ -n "$ios_booted" ]; then
+    printf '\n运行 ordercheck（模拟器 %s）\n' "$ios_booted"
+    xcrun simctl spawn "$ios_booted" "$(pwd)/bin/ordercheck"
 else
-    printf '\n⚠️  跳过 ordercheck：没有 booted 模拟器。\n'
-    printf '   跑一次：xcrun simctl boot "iPhone 17" && ./build.sh（或直接 ./bin/ordercheck）\n'
+    printf '\n⚠️  跳过 ordercheck：没有已启动的 iOS 模拟器。\n'
+    if xcrun simctl list devices booted 2>/dev/null | grep -q Booted; then
+        printf '   有已启动的模拟器，但没有一台是 iOS 运行时；ordercheck 是\n'
+        printf '   arm64-apple-ios16.0-simulator 的产物，在那些设备上跑不起来。\n'
+    fi
+    printf '   跑一次：xcrun simctl boot "iPhone 17" && ./build.sh\n'
+    printf '   （ordercheck 是模拟器产物，不能在 shell 里直接跑——会报\n'
+    printf '     "DYLD_ROOT_PATH not set for simulator program"，必须经 simctl spawn。）\n'
 fi

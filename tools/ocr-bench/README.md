@@ -40,8 +40,8 @@ PresbyFriend 的 iOS 版用 Vision 做图片 OCR。它的失败模式很隐蔽�
 
 需要 Xcode 命令行工具。产物在 `bin/`，不进版本库。
 
-`ordercheck` 例外：它编的是 iOS 模拟器目标（原因见下），运行时需要一台已启动的模拟器。
-没有 booted 模拟器时 `build.sh` 会明确跳过它并打印提示，不算构建失败。
+`ordercheck` 例外：它编的是 iOS 模拟器目标（原因见下），运行时需要一台已启动的 iOS 模拟器。
+没有可用的 iOS 模拟器时 `build.sh` 会明确跳过它并打印原因，不算构建失败。
 
 ## 工具
 
@@ -105,15 +105,24 @@ PresbyFriend 的 iOS 版用 Vision 做图片 OCR。它的失败模式很隐蔽�
 
 为什么不能像别的工具一样编成 macOS 可执行：比较器的输入类型是 `VNRecognizedTextObservation`，
 只有 iOS SDK 有。所以 `build.sh` 把它编成 `arm64-apple-ios16.0-simulator`，
-用 `xcrun simctl spawn booted ./bin/ordercheck` 跑。
+用 `xcrun simctl spawn <已启动的 iOS 模拟器 UDID> ./bin/ordercheck` 跑。它是**模拟器产物，
+不能在 shell 里直接执行**（会报 `DYLD_ROOT_PATH not set for simulator program`）。
+UDID 由 `build.sh` 按运行时分组自己挑，**只认 iOS**——`simctl spawn booted` 会把 watchOS /
+tvOS / visionOS 的设备一起列为候选，挑错了就是一次假失败（编出来的东西跑不起来）。
+没有可用的 iOS 模拟器时 `build.sh` 会明确跳过并说明原因，不算构建失败。
 
-对应的测试图是 `gen-image` 的两栏版式：
+平局分支对应的测试图是 `gen-image` 的两栏版式，**但 ordercheck 不读它**：上面几条断言喂的是
+与那张图几何一致的合成坐标（左栏 x=0.05、右栏 x=0.55），不碰像素、不碰 Vision——这正是它能
+离线跑的原因。图是给**人工**验的：
 
 ```sh
 ./bin/gen-image /tmp two-column   # 写出 /tmp/test_image_two_column.png
+./bin/ocr /tmp/test_image_two_column.png   # 看真实 Vision 给两个标题各报什么 origin.y
 ```
 
-两个栏目标题画在同一条基线上，正是平局分支要处理的形状。
+两个栏目标题画在同一条基线上，正是平局分支要处理的形状。ordercheck 断言的是「**若**两个块
+`origin.y` 相等，则左栏在前」这条规则；真实 Vision 是否真会给出完全相等的 `origin.y`，本仓库
+没有测过（也不需要——规则本身跟谁产生这些块无关）。
 
 ## 用途：回归测试
 

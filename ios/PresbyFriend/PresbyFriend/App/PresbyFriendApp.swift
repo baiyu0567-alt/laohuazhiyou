@@ -139,6 +139,14 @@ struct ContentView: View {
         .environmentObject(coordinator)
         .task {
             // 启动时后台准备识别模型，避免第一次按快门等 28s。
+            //
+            // 「先记下已生效的值、再预热」这个顺序就是上面的闸成立的前提，而它押在一条
+            // 看不见的假设上：`SettingsModel.load()`（在 `body` 的 `.onAppear` 里，先于本
+            // `.task`）会把 `recognitionLanguage` 从 `@Published` 默认的 `.system` 改成存储
+            // 值，所以冷启动时下面那个 `.onChange` 会真触发一次；这里记下的值正是它将要带来
+            // 的新值，那次 onChange 因此不重复预热——冷启动只预热一遍。
+            // 假设若不成立（`load()` 晚于本 `.task`），记下的会是默认值 `.system`，load 之后
+            // 的 onChange 会再预热一次：结果仍然安全，用户选的模型照样是热的，只是白跑一遍。
             applyRecognitionLanguages()
             appliedRecognitionLanguage = settings.recognitionLanguage
             coordinator.prewarm()
@@ -209,10 +217,18 @@ struct ContentView: View {
             // 这个 App 的用户没有别的方式退出。
             //
             // 今天渲染不到：`isPresenting` 只在 `open(text:)` / `open(image:)` 里置为 true，
-            // 而这两处都在同一次「先填内容、后置标志」的同步执行里完成。但 `open(image:)`
-            // 的兜底分支确实会**瞬时**经过这个状态（`text = nil` 执行完时 `fallbackImage`
-            // 还没被赋值），之所以看不见只是因为在主 actor 上两条相邻语句之间插不进一次
-            // 渲染——这个性质没有任何东西在保证，中间多一个 `await` 就会漏出来。
+            // 而这两处都在同一次「先填内容、后置标志」的同步执行里完成。两条路径都会
+            // **瞬时**经过这个状态——`open(image:)` 的兜底分支（`text = nil` 执行完时
+            // `fallbackImage` 还没被赋值）和 `open(text:)`（`fallbackImage = nil` 执行完时
+            // `self.text` 还没被赋值）。
+            //
+            // 其中**够得着的是后者**：阅读页已经开着时从外部进来一个 URL，走 `onOpenURL`
+            // → `settings.pendingURL` → 下面那个 `.onChange` → `open(text:)`，此时
+            // `isPresenting` 已经是 true。前者要在阅读页开着时调起 `open(image:)`，而那条路
+            // 被全屏遮罩挡着（放大镜快门和读取 tab 都在它下面）。
+            //
+            // 两条之所以都看不见，只是因为主 actor 上两条相邻语句之间插不进一次渲染
+            // ——这个性质没有任何东西在保证，中间多一个 `await` 就会漏出来。
             // 代价是十行兜底，收益是永远不会把用户困在黑屏上。
             ZStack {
                 Color.black.ignoresSafeArea()

@@ -33,7 +33,12 @@ struct OCRImageSource {
         // CIImage 支撑的 UIImage 没有 cgImage（NSItemProvider 会给这种）。以前直接返回 nil，
         // 等于把用户分享的图丢掉。这里光栅化一份：`draw(in:)` 会把 imageOrientation 应用
         // 到像素上，所以结果按 .up 处理，不要再叠一次方向。
-        guard uiImage.size.width > 0, uiImage.size.height > 0 else { return nil }
+        // 尺寸必须**有限且为正**：`UIGraphicsImageRenderer` 拿到 0 或 ±∞ 的尺寸都得不到
+        // 可用的图（0 尺寸实测返回 nil `cgImage`）。在这里提前拦掉，这个函数的 nil 契约
+        // 就是由构造保证的，而不是靠 UIKit 恰好不崩。（`NaN` 已被 `> 0` 的比较为假拦下，
+        // 无限 extent 的 `CIImage`——如 `CIImage(color:)`——报的是 `+∞`，以前会漏过去。）
+        guard uiImage.size.width.isFinite, uiImage.size.height.isFinite,
+              uiImage.size.width > 0, uiImage.size.height > 0 else { return nil }
         let format = UIGraphicsImageRendererFormat.default()
         format.scale = uiImage.scale
         let rendered = UIGraphicsImageRenderer(size: uiImage.size, format: format).image { _ in

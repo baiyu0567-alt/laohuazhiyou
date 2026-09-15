@@ -31,8 +31,13 @@ final class MagnifierViewModel: NSObject, ObservableObject {
     /// 用这个标志让快门在那段窗口里显示成不可用。
     ///
     /// **只在主线程写**：`startSession()` 的 `startRunning()` 在后台队列上返回，
-    /// 若在那里直接赋值，就是一次从后台线程发布的 SwiftUI 变更（本文件的两个 target
-    /// 默认隔离不同，不能指望隔离帮你拦住），所以那条路径显式回 `@MainActor` 再写。
+    /// 若在那里直接赋值，就是一次从后台线程发布的 SwiftUI 变更。
+    ///
+    /// 两个 target 的默认隔离不同，而这段写法必须在**两边都成立**：app target 默认
+    /// `@MainActor`，这个属性本身就是 main actor 隔离的，并发检查一收紧，那次后台写
+    /// 就会被编译器指出来；shareextention target 默认 nonisolated，同一个类在那里没有
+    /// 隔离可言，同一句写从隔离角度完全合法。所以正确性不押在默认隔离上——那条路径
+    /// 显式回 `@MainActor` 再写。
     @Published private(set) var isSessionRunning = false
 
     let session = AVCaptureSession()
@@ -104,7 +109,8 @@ final class MagnifierViewModel: NSObject, ObservableObject {
                 self.session.startRunning()
                 // 回主线程再写 `@Published`：这段闭包跑在后台队列上（`startRunning()`
                 // 会阻塞，不能占住主线程），在这里直接赋值就是从后台线程发布一次
-                // SwiftUI 变更——两个 target 的默认隔离不同，靠隔离也拦不住。
+                // SwiftUI 变更。两个 target 的默认隔离不同（见 `isSessionRunning` 的
+                // 注释），所以不靠隔离，统一显式回 `@MainActor` 再写。
                 Task { @MainActor in self.isSessionRunning = true }
             }
             applyZoom()
