@@ -27,20 +27,38 @@ struct OCRImageSource {
 
     /// 从 `UIImage` 构造（部分分享扩展的 `NSItemProvider` 直接给 `UIImage`）。
     static func from(uiImage: UIImage) -> OCRImageSource? {
-        guard let cg = uiImage.cgImage else { return nil }
-        let orientation: CGImagePropertyOrientation
-        switch uiImage.imageOrientation {
-        case .up:            orientation = .up
-        case .down:          orientation = .down
-        case .left:          orientation = .left
-        case .right:         orientation = .right
-        case .upMirrored:    orientation = .upMirrored
-        case .downMirrored:  orientation = .downMirrored
-        case .leftMirrored:  orientation = .leftMirrored
-        case .rightMirrored: orientation = .rightMirrored
-        @unknown default:    orientation = .up
+        if let cg = uiImage.cgImage {
+            return OCRImageSource(image: cg, orientation: orientation(of: uiImage.imageOrientation))
         }
-        return OCRImageSource(image: cg, orientation: orientation)
+        // CIImage 支撑的 UIImage 没有 cgImage（NSItemProvider 会给这种）。以前直接返回 nil，
+        // 等于把用户分享的图丢掉。这里光栅化一份：`draw(in:)` 会把 imageOrientation 应用
+        // 到像素上，所以结果按 .up 处理，不要再叠一次方向。
+        guard uiImage.size.width > 0, uiImage.size.height > 0 else { return nil }
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = uiImage.scale
+        let rendered = UIGraphicsImageRenderer(size: uiImage.size, format: format).image { _ in
+            uiImage.draw(in: CGRect(origin: .zero, size: uiImage.size))
+        }
+        guard let cg = rendered.cgImage else { return nil }
+        return OCRImageSource(image: cg)
+    }
+
+    /// `UIImage.Orientation` → `CGImagePropertyOrientation` 的 8 例映射。
+    ///
+    /// 两个枚举的 case 名字一一对应（raw value 不同，语义相同），
+    /// `from(uiImage:)` 的光栅化路径和直通路径共用这一份。
+    private static func orientation(of value: UIImage.Orientation) -> CGImagePropertyOrientation {
+        switch value {
+        case .up:            return .up
+        case .down:          return .down
+        case .left:          return .left
+        case .right:         return .right
+        case .upMirrored:    return .upMirrored
+        case .downMirrored:  return .downMirrored
+        case .leftMirrored:  return .leftMirrored
+        case .rightMirrored: return .rightMirrored
+        @unknown default:    return .up
+        }
     }
 
     /// 转成可以直接显示的 `UIImage`。
