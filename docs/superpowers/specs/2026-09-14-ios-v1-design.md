@@ -346,10 +346,25 @@ iOS 16 起，程序化读 `UIPasteboard.general` 会弹系统对话框
 
 **这是最危险的失败模式**——完全崩溃但不报错。缓解：
 
-- 默认跟随系统语言（`Locale.current.language.languageCode`），中文系统用 `["zh-Hans"]`，
-  其余用 `["en-US"]`
+- 默认跟随系统语言（**`Locale.preferredLanguages.first`**，中文系统用 `["zh-Hans"]`，
+  其余用 `["en-US"]`）
 - 设置页提供手动覆盖
 - `recognitionLanguages` 的构造集中在一处，不散落
+
+> **2026-09-15 更正——本行原写的是 `Locale.current.language.languageCode`，那个 API 会让这条
+> 缓解措施刚好失效，而失效的正是上面点名的那个失败模式。**
+>
+> `Locale.current` 是**按本 App 的本地化过滤之后**的结果，不是用户的系统语言。本 App 只出
+> en/de/fr/es/it/pt 六种（六份 `.lproj` + `developmentRegion = en`，且没有
+> `CFBundleLocalizations`），所以在**中文系统**的设备上它返回 `"en"`，`.system` 分支
+> （`code.hasPrefix("zh") ? ["zh-Hans"] : ["en-US"]`）于是**永远选不到中文**——而 `.system`
+> 正是默认值。结果：中文设备 + 默认设置 + 拍一张中文，默认跑英文模型，**完全崩溃但不报错**，
+> 正是本节标题所指的那个模式。`Locale.preferredLanguages` 不被 App 本地化过滤，返回的是用户
+> 真实偏好，才与「跟随系统语言」这句设计意图相符。两处独立实测记录见实现计划的对应事后更正。
+>
+> 注意这条错误的**形态**值得记：缓解措施本身写对了（选中文模型），只有取系统语言那一步的
+> **API 选错**，而它错得很安静——非中文语言下两个 API 结果相同，所以只在中文场景暴露，
+> 而中文恰恰是本 App 的主要场景。
 
 ### 首次使用模型准备
 
