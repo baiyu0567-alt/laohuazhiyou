@@ -5,12 +5,10 @@ import Combine
 
 enum SiriActivity: String {
     case openMagnifier = "com.presbyfriend.open-magnifier"
-    case readClipboard = "com.presbyfriend.read-clipboard"
 
     var title: String {
         switch self {
         case .openMagnifier: return L10n.magnifierTab
-        case .readClipboard: return L10n.readAloud
         }
     }
 
@@ -55,16 +53,13 @@ final class TabRouter: ObservableObject {
     @Published var selectedTab = 0
 }
 
-// MARK: - Content View (2 tabs: Magnifier + Settings)
+// MARK: - Content View (3 tabs: Magnifier + Read + Settings)
 
 struct ContentView: View {
     @EnvironmentObject var settings: SettingsModel
     @StateObject private var router = TabRouter()
+    @StateObject private var coordinator = ReaderLaunchCoordinator()
 
-    @State private var showReader = false
-    @State private var readerText: String?
-    @State private var readerParagraphs: [String]?
-    @State private var lastClipboardText = ""
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -72,50 +67,57 @@ struct ContentView: View {
             TabView(selection: $router.selectedTab) {
                 NavigationStack {
                     MagnifierTab(
-                        onTextDetected: { text in
-                            readerText = text
-                            readerParagraphs = nil
-                            showReader = true
-                        },
+                        onTextDetected: { text in coordinator.open(text: text) },
                         settings: settings
                     )
                 }
-                .tabItem {
-                    Image(systemName: "magnifyingglass")
-                }
+                .tabItem { Label(L10n.magnifierTab, systemImage: "magnifyingglass") }
                 .tag(0)
 
                 NavigationStack {
-                    SettingsView()
+                    ReadTabView()
                 }
-                .tabItem {
-                    Image(systemName: "gearshape")
-                }
+                .tabItem { Label(L10n.readTab, systemImage: "text.viewfinder") }
                 .tag(1)
+
+                // SettingsView 自带 NavigationStack，这里不要再包一层
+                SettingsView()
+                    .tabItem { Label(L10n.settingsTab, systemImage: "gearshape") }
+                    .tag(2)
             }
             .onContinueUserActivity(SiriActivity.openMagnifier.rawValue) { _ in
                 router.selectedTab = 0
             }
-            .onContinueUserActivity(SiriActivity.readClipboard.rawValue) { _ in
-                router.selectedTab = 0
+
+            if coordinator.isPreparing {
+                Color.black.opacity(0.4).ignoresSafeArea()
+                VStack(spacing: 16) {
+                    ProgressView()
+                    Text(L10n.ocrPreparing)
+                        .font(.title3)
+                        .foregroundColor(.white)
+                }
+                .padding(28)
+                .background(.ultraThinMaterial)
+                .cornerRadius(16)
+                .zIndex(200)
             }
 
-            // Reader overlay — shown from clipboard or text detection
-            if showReader, let text = readerText {
+            if coordinator.isPresenting {
                 NavigationStack {
-                    ReaderView(text: text, paragraphs: readerParagraphs, onClose: {
-                        showReader = false
-                        readerText = nil
-                    })
+                    readerContent
                 }
                 .zIndex(100)
             }
         }
-        .onAppear { checkClipboard() }
-        .onChange(of: scenePhase) { phase in
-            if phase == .active  { checkClipboard() }
-            if phase == .background { lastClipboardText = "" }
+        .environmentObject(coordinator)
+        .task {
+            // 启动时后台准备识别模型，避免第一次按快门等 28s。
+            applyRecognitionLanguages()
+            coordinator.prewarm()
         }
+        .onChange(of: settings.recognitionLanguage) { _ in applyRecognitionLanguages() }
+        .onChange(of: settings.language) { _ in applyRecognitionLanguages() }
         .onChange(of: settings.pendingURL) { url in
             guard let url else { return }
             settings.pendingURL = nil
@@ -124,23 +126,47 @@ struct ContentView: View {
                     let extractor = URLExtractor()
                     let text = try await extractor.extract(from: url.absoluteString)
                     if text.count > 50 {
-                        readerText = text
-                        readerParagraphs = nil
-                        showReader = true
+                        coordinator.open(text: text)
                     }
                 } catch {}
             }
         }
     }
 
-    private func checkClipboard() {
-        let text = UIPasteboard.general.string ?? ""
-        guard !text.isEmpty, text != lastClipboardText else { return }
-        lastClipboardText = text
-        SiriActivity.readClipboard.donate()
-        readerText = text
-        readerParagraphs = nil
-        showReader = true
+    @ViewBuilder
+    private var readerContent: some View {
+        if let text = coordinator.text {
+            ReaderView(text: text, paragraphs: nil, onClose: { coordinator.close() })
+        } else if let source = coordinator.fallbackImage {
+            ZStack(alignment: .top) {
+                ZoomableImageView(image: source.uiImage)
+                    .ignoresSafeArea()
+                VStack {
+                    Text(L10n.ocrNoText)
+                        .font(.title3)
+                        .multilineTextAlignment(.center)
+                        .padding(12)
+                        .background(.ultraThinMaterial)
+                        .cornerRadius(12)
+                        .padding()
+                    Spacer()
+                }
+                VStack {
+                    Spacer()
+                    Button(L10n.close) { coordinator.close() }
+                        .font(.title2)
+                        .buttonStyle(.borderedProminent)
+                        .padding(.bottom, 32)
+                }
+            }
+        }
+    }
+
+    private func applyRecognitionLanguages() {
+        coordinator.updateLanguages(
+            RecognitionLanguage.visionLanguages(
+                systemLanguageCode: Locale.current.language.languageCode?.identifier,
+                preference: settings.recognitionLanguage))
     }
 }
 
@@ -170,7 +196,7 @@ struct MagnifierTab: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
                 Button("See how reading works") {
-                    onTextDetected("This is PresbyFriend reading mode.\n\nCopy any text from another app → open PresbyFriend → it appears here automatically.\n\nTap the play button above to hear it read aloud.\n\nUse the Aa button to adjust font size, theme, line height and letter spacing.")
+                    onTextDetected("This is PresbyFriend reading mode.\n\nUse the Aa button to adjust font size, theme, line height and letter spacing.\n\nTap the play button above to hear it read aloud.")
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.secondary)
