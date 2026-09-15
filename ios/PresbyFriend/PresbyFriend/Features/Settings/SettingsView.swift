@@ -86,6 +86,23 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Picker(L10n.ocrLanguage, selection: $vm.recognitionLanguage) {
+                        ForEach(RecognitionLanguage.allCases) { option in
+                            Text(label(for: option))
+                                .font(bodyFont)
+                                .tag(option)
+                        }
+                    }
+                    .font(labelFont)
+                } header: {
+                    Text(L10n.ocrLanguage)
+                        .font(labelFont)
+                } footer: {
+                    Text(L10n.ocrLanguageDesc)
+                        .font(bodyFont)
+                }
+
+                Section {
                     Button {
                         showPaywall = true
                     } label: {
@@ -132,5 +149,14 @@ struct SettingsView: View {
         .onChange(of: vm.letterSpacing) { _ in vm.save(to: settings) }
         .onChange(of: vm.rulerEnabled) { _ in vm.save(to: settings) }
         .onChange(of: vm.selectedLanguage) { _ in vm.save(to: settings) }
+        .onChange(of: vm.recognitionLanguage) { _ in vm.save(to: settings) }
+    }
+
+    private func label(for option: RecognitionLanguage) -> String {
+        switch option {
+        case .system:  return L10n.ocrLanguageSystem
+        case .chinese: return L10n.ocrLanguageChinese
+        case .english: return L10n.ocrLanguageEnglish
+        }
     }
 }
