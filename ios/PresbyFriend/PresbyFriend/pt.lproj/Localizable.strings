@@ -22,6 +22,18 @@
 "magnifier_tab" = "Lupa";
 "no_shared_content" = "Nenhum conteúdo partilhado encontrado";
 "no_text_found" = "Nenhum texto encontrado neste ecrã";
+"ocr_language" = "Idioma de reconhecimento";
+"ocr_language_chinese" = "Chinês";
+"ocr_language_desc" = "Escolha o idioma do texto que você fotografa. Escolher o errado faz o reconhecimento falhar em silêncio.";
+"ocr_language_english" = "Inglês";
+"ocr_language_system" = "Seguir o sistema";
+"ocr_no_text" = "Nenhum texto encontrado nesta imagem. Mostrando o original — faça pinça para ampliar.";
+"ocr_preparing" = "Preparando o reconhecimento de texto…";
+"paste_and_magnify" = "Colar e ampliar";
+"paste_hint" = "Copie o texto em outro app primeiro, depois toque em Colar";
+"photo_load_fail" = "Não foi possível carregar essa imagem";
+"pick_from_photos" = "Escolher uma foto";
+"pick_photo_hint" = "Escolha uma imagem do texto que você quer ler";
 "play_store_coming" = "A compra estará disponível na App Store. Fique atento!";
 "pro_feature" = "Funcionalidade Pro";
 "pro_monthly" = "PresbyFriend Pro Mensal";
@@ -31,6 +43,7 @@
 "pro_yearly_desc" = "Melhor valor — poupe 40 % com o plano anual";
 "pro_yearly_price" = "19,99 €/ano";
 "read_aloud" = "Ler em voz alta";
+"read_tab" = "Ler";
 "reading_mode" = "Modo de leitura";
 "reading_ruler" = "Régua de leitura";
 "reset_confirm" = "Todas as configurações serão repostas para os valores padrão. Continuar?";
@@ -41,6 +54,7 @@
 "ruler_description" = "Destaca a linha sob o dedo durante a leitura";
 "settings_tab" = "Configurações";
 "show_controls" = "Mostrar controlos";
+"shutter" = "Capturar";
 "stop_reading" = "Parar";
 "tap_text_to_read" = "Toque no texto para ler";
 "theme_dark" = "Escuro";

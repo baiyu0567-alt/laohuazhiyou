@@ -22,6 +22,18 @@
 "magnifier_tab" = "Magnifier";
 "no_shared_content" = "No shared content found";
 "no_text_found" = "No text found on this screen";
+"ocr_language" = "Recognition language";
+"ocr_language_chinese" = "Chinese";
+"ocr_language_desc" = "Choose the language of the text you photograph. Picking the wrong one makes recognition fail silently.";
+"ocr_language_english" = "English";
+"ocr_language_system" = "Follow system";
+"ocr_no_text" = "No text found in this picture. Showing the original — pinch to zoom.";
+"ocr_preparing" = "Preparing text recognition…";
+"paste_and_magnify" = "Paste & Magnify";
+"paste_hint" = "Copy text in another app first, then tap Paste";
+"photo_load_fail" = "Could not load that picture";
+"pick_from_photos" = "Choose a Photo";
+"pick_photo_hint" = "Pick a picture of the text you want to read";
 "play_store_coming" = "Purchase will be available on the App Store. Stay tuned!";
 "pro_feature" = "Pro Feature";
 "pro_monthly" = "PresbyFriend Pro Monthly";
@@ -31,6 +43,7 @@
 "pro_yearly_desc" = "Best value — save 40% with annual plan";
 "pro_yearly_price" = "$19.99/yr";
 "read_aloud" = "Read Aloud";
+"read_tab" = "Read";
 "reading_mode" = "Reading Mode";
 "reading_ruler" = "Reading Ruler";
 "reset_confirm" = "This will reset all settings to defaults. Continue?";
@@ -41,6 +54,7 @@
 "ruler_description" = "Highlight the line under your finger while reading";
 "settings_tab" = "Settings";
 "show_controls" = "Show Controls";
+"shutter" = "Capture";
 "stop_reading" = "Stop";
 "tap_text_to_read" = "Tap text to read";
 "theme_dark" = "Dark";

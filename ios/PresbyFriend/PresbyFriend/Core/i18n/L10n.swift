@@ -57,4 +57,18 @@ enum L10n {
     static var noTextFound: String { NSLocalizedString("no_text_found", comment: "") }
     static var dailyLimitReached: String { NSLocalizedString("daily_limit_reached", comment: "") }
     static var clipboardEmptyHint: String { NSLocalizedString("clipboard_empty_hint", comment: "") }
+    static var readTab: String { NSLocalizedString("read_tab", comment: "") }
+    static var pasteAndMagnify: String { NSLocalizedString("paste_and_magnify", comment: "") }
+    static var pasteHint: String { NSLocalizedString("paste_hint", comment: "") }
+    static var pickFromPhotos: String { NSLocalizedString("pick_from_photos", comment: "") }
+    static var pickPhotoHint: String { NSLocalizedString("pick_photo_hint", comment: "") }
+    static var shutter: String { NSLocalizedString("shutter", comment: "") }
+    static var photoLoadFail: String { NSLocalizedString("photo_load_fail", comment: "") }
+    static var ocrPreparing: String { NSLocalizedString("ocr_preparing", comment: "") }
+    static var ocrNoText: String { NSLocalizedString("ocr_no_text", comment: "") }
+    static var ocrLanguage: String { NSLocalizedString("ocr_language", comment: "") }
+    static var ocrLanguageDesc: String { NSLocalizedString("ocr_language_desc", comment: "") }
+    static var ocrLanguageSystem: String { NSLocalizedString("ocr_language_system", comment: "") }
+    static var ocrLanguageChinese: String { NSLocalizedString("ocr_language_chinese", comment: "") }
+    static var ocrLanguageEnglish: String { NSLocalizedString("ocr_language_english", comment: "") }
 }

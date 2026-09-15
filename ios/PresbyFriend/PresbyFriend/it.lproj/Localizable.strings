@@ -22,6 +22,18 @@
 "magnifier_tab" = "Lente";
 "no_shared_content" = "Nessun contenuto condiviso trovato";
 "no_text_found" = "Nessun testo trovato su questa schermata";
+"ocr_language" = "Lingua di riconoscimento";
+"ocr_language_chinese" = "Cinese";
+"ocr_language_desc" = "Scegli la lingua del testo che fotografi. Scegliere quella sbagliata fa fallire il riconoscimento in silenzio.";
+"ocr_language_english" = "Inglese";
+"ocr_language_system" = "Come il sistema";
+"ocr_no_text" = "Nessun testo trovato in questa immagine. Viene mostrato l'originale — pizzica per ingrandire.";
+"ocr_preparing" = "Preparazione del riconoscimento del testo…";
+"paste_and_magnify" = "Incolla e ingrandisci";
+"paste_hint" = "Prima copia il testo in un'altra app, poi tocca Incolla";
+"photo_load_fail" = "Impossibile caricare l'immagine";
+"pick_from_photos" = "Scegli una foto";
+"pick_photo_hint" = "Scegli un'immagine del testo che vuoi leggere";
 "play_store_coming" = "L'acquisto sarà disponibile sull'App Store. Rimanete sintonizzati!";
 "pro_feature" = "Funzionalità Pro";
 "pro_monthly" = "PresbyFriend Pro Mensile";
@@ -31,6 +43,7 @@
 "pro_yearly_desc" = "Miglior valore — risparmia il 40% con il piano annuale";
 "pro_yearly_price" = "19,99 €/anno";
 "read_aloud" = "Leggi ad alta voce";
+"read_tab" = "Leggi";
 "reading_mode" = "Modalità lettura";
 "reading_ruler" = "Righello di lettura";
 "reset_confirm" = "Tutte le impostazioni verranno ripristinate ai valori predefiniti. Continuare?";
@@ -41,6 +54,7 @@
 "ruler_description" = "Evidenzia la riga sotto il dito durante la lettura";
 "settings_tab" = "Impostazioni";
 "show_controls" = "Mostra controlli";
+"shutter" = "Scatta";
 "stop_reading" = "Ferma";
 "tap_text_to_read" = "Tocca il testo per leggere";
 "theme_dark" = "Scuro";

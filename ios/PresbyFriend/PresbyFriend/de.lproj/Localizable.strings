@@ -22,6 +22,18 @@
 "magnifier_tab" = "Lupe";
 "no_shared_content" = "Kein geteilter Inhalt gefunden";
 "no_text_found" = "Kein Text auf diesem Bildschirm gefunden";
+"ocr_language" = "Erkennungssprache";
+"ocr_language_chinese" = "Chinesisch";
+"ocr_language_desc" = "Wählen Sie die Sprache des fotografierten Textes. Die falsche Wahl lässt die Erkennung still fehlschlagen.";
+"ocr_language_english" = "Englisch";
+"ocr_language_system" = "Wie System";
+"ocr_no_text" = "Kein Text im Bild gefunden. Das Original wird angezeigt — zum Zoomen aufziehen.";
+"ocr_preparing" = "Texterkennung wird vorbereitet…";
+"paste_and_magnify" = "Einfügen & vergrößern";
+"paste_hint" = "Kopieren Sie den Text zuerst in einer anderen App, dann tippen Sie auf Einfügen";
+"photo_load_fail" = "Bild konnte nicht geladen werden";
+"pick_from_photos" = "Foto auswählen";
+"pick_photo_hint" = "Wählen Sie ein Bild des Textes, den Sie lesen möchten";
 "play_store_coming" = "Der Kauf wird im App Store verfügbar sein. Bleiben Sie dran!";
 "pro_feature" = "Pro-Funktion";
 "pro_monthly" = "PresbyFriend Pro Monatlich";
@@ -31,6 +43,7 @@
 "pro_yearly_desc" = "Bester Wert — 40 % sparen mit Jahresplan";
 "pro_yearly_price" = "19,99 €/Jahr";
 "read_aloud" = "Vorlesen";
+"read_tab" = "Lesen";
 "reading_mode" = "Lesemodus";
 "reading_ruler" = "Lesezeile";
 "reset_confirm" = "Alle Einstellungen werden auf Standardwerte zurückgesetzt. Fortfahren?";
@@ -41,6 +54,7 @@
 "ruler_description" = "Hervorhebung der Zeile unter Ihrem Finger beim Lesen";
 "settings_tab" = "Einstellungen";
 "show_controls" = "Steuerung anzeigen";
+"shutter" = "Aufnehmen";
 "stop_reading" = "Stopp";
 "tap_text_to_read" = "Text zum Lesen antippen";
 "theme_dark" = "Dunkel";
