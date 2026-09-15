@@ -94,9 +94,6 @@ struct SettingsView: View {
                         }
                     }
                     .font(labelFont)
-                } header: {
-                    Text(L10n.ocrLanguage)
-                        .font(labelFont)
                 } footer: {
                     Text(L10n.ocrLanguageDesc)
                         .font(bodyFont)

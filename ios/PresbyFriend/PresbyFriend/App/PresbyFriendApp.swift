@@ -61,6 +61,15 @@ struct ContentView: View {
     @StateObject private var router = TabRouter()
     @StateObject private var coordinator = ReaderLaunchCoordinator()
 
+    /// 识别语言偏好**已经生效**的那一个值。
+    ///
+    /// 用来区分两件长得一样的事：**用户在设置页改了选择**，和**冷启动时
+    /// `settings.load()` 把存下来的值读进来**——`load()` 会把默认值 `.system`
+    /// 改成存储值，所以 `settings.recognitionLanguage` 的 `.onChange` 在冷启动
+    /// 时确实会真触发一次。只有前者需要补一次预热；后者由 `.task` 里那次负责。
+    /// 不区分就会每次冷启动预热两遍。
+    @State private var appliedRecognitionLanguage: RecognitionLanguage?
+
     private static let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "com.presbyfriend",
         category: "url-extract")
@@ -131,9 +140,23 @@ struct ContentView: View {
         .task {
             // 启动时后台准备识别模型，避免第一次按快门等 28s。
             applyRecognitionLanguages()
+            appliedRecognitionLanguage = settings.recognitionLanguage
             coordinator.prewarm()
         }
-        .onChange(of: settings.recognitionLanguage) { _ in applyRecognitionLanguages() }
+        .onChange(of: settings.recognitionLanguage) { newValue in
+            // 设置页可以在运行中改语言（这是 Task 10 新开的路径，在此之前只能重启才生效）。
+            // 换语言必须**先于**预热：`prewarm()` 最终走到 `recognize`，读的是当时生效的
+            // `languages`；顺序反了就是拿旧语言去预热，等于没热。
+            applyRecognitionLanguages()
+            // 冷启动那次 `load()` 也会走到这里（`.system` → 存储值本身就是一次变化），
+            // 那不是用户操作，预热归上面的 `.task`。只对运行中的真实变更补一次预热，
+            // 且每次变更恰好一次：这里判的是「和已经生效的值不同」，用户在两个选项间
+            // 来回切，每一次都会预热。
+            if let applied = appliedRecognitionLanguage, applied != newValue {
+                coordinator.prewarm()
+            }
+            appliedRecognitionLanguage = newValue
+        }
         .onChange(of: settings.language) { _ in applyRecognitionLanguages() }
         .onChange(of: settings.pendingURL) { url in
             guard let url else { return }
