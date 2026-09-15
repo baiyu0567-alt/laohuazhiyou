@@ -207,19 +207,20 @@ struct ContentView: View {
                     Self.logger.error("URL extraction failed for \(url.absoluteString, privacy: .public): \(String(describing: error))")
                     // 抛错同样是「用户分享了、什么都没发生」。
                     //
-                    // **但取消不是失败。** 下面两个合取项分工不同，都不许当成死代码删掉：
-                    //   - `error is CancellationError`：在本路径上**匹配不到任何东西**。
-                    //     `extract` 唯一的挂起点是 `URLExtractor.swift:23` 的
-                    //     `URLSession.shared.data(from:)`，全文件没有一处 `Task.checkCancellation()`；
-                    //     而 URLSession 报取消用的是 `URLError(.cancelled)`（NSURLError −999），
-                    //     不是 `CancellationError`。
-                    //   - `!Task.isCancelled`：**真正会拦下取消的是这一半**——它读的是当前任务的
-                    //     取消位，与抛出来的具体错误类型无关。
-                    //
-                    // 今天没有任何东西持有这个非结构化 `Task` 的句柄，所以它不会被取消，这个守卫
-                    // 恒为真——这正是我们要的行为。留着 `!Task.isCancelled` 是因为：**一旦日后有改动
-                    // 让这个任务变得可取消，删掉它就等于把这道守卫要防的那个行为重新装回去**
-                    // （任务被取消 → 弹一个「提取失败」，而用户并没有失败）。
+                    // **但取消不是失败。** 下面两个合取项**各有各的留存理由，而且两条理由正好
+                    // 相反**——都不能因为「在这里看起来没用」而删掉：
+                    //   - `error is CancellationError`：**今天在本路径上是空转的**。`extract`
+                    //     唯一的挂起点是 `URLExtractor.swift:23` 的 `URLSession.shared.data(from:)`，
+                    //     全文件没有一处 `Task.checkCancellation()`；而 URLSession 报取消用的是
+                    //     `URLError(.cancelled)`（NSURLError −999），不是 `CancellationError`。
+                    //     留它是因为**一旦日后有人给 `extract` 加上 `Task.checkCancellation()`，
+                    //     它就会变成真正起作用的那一项**。
+                    //   - `!Task.isCancelled`：**今天真正拦下取消的是这一半**——它读的是当前任务的
+                    //     取消位，与抛出来的具体错误类型无关。它不能当「死代码」删掉的理由和上一条
+                    //     相反：今天没有任何东西持有这个非结构化 `Task`（`:196`）的句柄，它根本
+                    //     不会被取消，所以「它有没有用」**无法靠阅读观察出来**——读代码只会看到它
+                    //     恒为真。一旦日后有改动让这个任务变得可取消，删掉它就等于把这道守卫要防的
+                    //     那个行为重新装回去（任务被取消 → 弹一个「提取失败」，而用户并没有失败）。
                     if !(error is CancellationError) && !Task.isCancelled {
                         showingURLExtractError = true
                     }
@@ -272,11 +273,22 @@ struct ContentView: View {
             // 这里曾经写着「够得着的是后者」——阅读页已经开着时从外部进来一个 URL，走
             // `onOpenURL` → `settings.pendingURL` → 下面那个 `.onChange` → `open(text:)`，
             // 此时 `isPresenting` 已经是 true。**这个说法站不住**：
-            // `settings.pendingURL` 全树只有一个写者，就是 `:43` 的 `onOpenURL`；而本 App
-            // **没有注册任何 URL 路由**——`CFBundleURLTypes`（自定义 scheme）和
-            // `CFBundleDocumentTypes` 在 `project.pbxproj` 里根本不存在，在**构建产物**的
-            // `PresbyFriend.app/Info.plist` 上实测也都是 "Does Not Exist"。没有 scheme、
-            // 没有文档类型，iOS 就无法用 URL 把本 App 打开，`onOpenURL` 也就没有入口。
+            // `settings.pendingURL` 全树只有一个写者，就是 `:43` 的 `onOpenURL`；而 iOS 能把
+            // URL 交给 App 的几条路，本 App **一条都不具备**——下面是**逐条排除**，不是只看
+            // 了两个键就下结论：
+            //   - **URL scheme**：`CFBundleURLTypes` 在 `project.pbxproj` 里不存在，在**构建
+            //     产物**的 `PresbyFriend.app/Info.plist` 上实测也是 "Does Not Exist"；
+            //   - **document type**：`CFBundleDocumentTypes` 同上，两处都没有；
+            //   - **universal link**：需要 `com.apple.developer.associated-domains` 权限，
+            //     而 `PresbyFriend.entitlements` 里**只有** `com.apple.security.application-groups`
+            //     （`grep -rn 'associated-domains' ios/` 全仓库无命中）；
+            //   - **widget 的 `widgetURL`**：本工程只有两个 target——app
+            //     （`com.apple.product-type.application`）与分享扩展
+            //     （`com.apple.product-type.app-extension`），**没有 widget extension**，
+            //     源码里也没有 `widgetURL` / `WidgetKit`（`find ios -iname '*widget*'` 为空）。
+            //
+            // 所以 `onOpenURL` 没有入口。**注意别把理由写窄**：scheme 与 document type 只是
+            // 这几条路里的两条，缺少它们本身并不等于「iOS 打不开」——是上面四条合起来才成立的。
             //
             // 但**不能**由此说成「不可达」：本 App 确实还有一条 Siri/活动 面——app target 的
             // 构建设置声明了 `INFOPLIST_KEY_NSUserActivityTypes`（`project.pbxproj:364/:401`，
