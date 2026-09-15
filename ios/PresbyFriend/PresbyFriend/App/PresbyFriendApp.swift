@@ -70,10 +70,11 @@ struct ContentView: View {
     /// `.system`，值没变，回调根本不发生）。前者需要补一次预热；后者由 `.task`
     /// 里那次负责。不区分的话，存储值非 `.system` 的用户每次冷启动会多打一次
     /// `prewarm()`——两份数组逐字相同（都出自 `load()` 之后的
-    /// `settings.recognitionLanguage`），但幂等那道 guard 只在头一次跑**完**之后才拦得住
-    /// （`TextRecognitionService.swift:129-131`），这次调用落在预热还在途的窗口里。
+    /// `settings.recognitionLanguage`），而 `prewarm()` 本身没有幂等闸（见它的注释），
+    /// 这次调用落在预热还在途的窗口里，拦不住。
     /// 代价只是第二次 `recognize` 排在串行 `queue` 上、模型已热之后那实测的 0.1–0.35s
-    /// （`:124`），不是再准备一遍模型：这道闸省掉的是一次**无谓的调用**。
+    /// （见 `TextRecognitionService.prewarm()` 的注释），不是再准备一遍模型：
+    /// 这道闸省掉的是一次**无谓的调用**。
     @State private var appliedRecognitionLanguage: RecognitionLanguage?
 
     private static let logger = Logger(
@@ -149,7 +150,7 @@ struct ContentView: View {
             // 先自己把存储的设置读进来，**不再依赖** App 层 `.onAppear` 里那次 `load()`
             // 先于本 `.task` 到达——SwiftUI 不保证这个顺序，而押在它上面的后果是冷启动
             // 预热两遍（`.task` 热 `.system` 那组，随后的 onChange 再热存储那组，两份
-            // 不同的数组，`prewarm()` 的按语言组幂等拦不住，见它的注释）。
+            // 不同的数组，`prewarm()` 没有幂等闸，两次都会真跑）。
             // `load()` 幂等且便宜（只读 UserDefaults 并给 @Published 赋值，见
             // SettingsModel.swift:20-29），`ShareView` 也已经连着调过两次，所以这里先读
             // 一次是安全的：读进来之后记下的就是存储值，下面那个 `.onChange` 会被闸挡掉。
@@ -256,10 +257,18 @@ struct ContentView: View {
         }
     }
 
+    /// 必须用 `Locale.preferredLanguages`（用户的真实语言偏好），**不能用 `Locale.current`**。
+    /// `Locale.current` 是按本 App 的本地化过滤后的结果：本 App 只出 en/de/fr/es/it/pt
+    /// （`*.lproj` + `developmentRegion = en`，且没有 `CFBundleLocalizations`），所以在
+    /// 中文系统的设备上它返回的是 `en`——`.system` 分支于是永远选不到中文，默认就拿
+    /// `["en-US"]` 去认中文：不报错、不崩溃，只是安静地输出垃圾（实测「用法用量」→ "mzms"）。
+    /// 已在 booted 模拟器的本 App 上实测：`-AppleLanguages (zh-Hans)` 启动时
+    /// `Locale.current.languageCode = en`（identifier `en_CN`，`preferredLocalizations = [en]`），
+    /// 而 `Locale.preferredLanguages[0] = "zh-Hans"`。
     private func applyRecognitionLanguages() {
         coordinator.updateLanguages(
             RecognitionLanguage.visionLanguages(
-                systemLanguageCode: Locale.current.language.languageCode?.identifier,
+                systemLanguageCode: Locale.preferredLanguages.first,
                 preference: settings.recognitionLanguage))
     }
 }

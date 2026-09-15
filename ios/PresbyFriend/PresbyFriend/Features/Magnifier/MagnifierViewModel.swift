@@ -40,6 +40,22 @@ final class MagnifierViewModel: NSObject, ObservableObject {
     /// 显式回 `@MainActor` 再写。
     @Published private(set) var isSessionRunning = false
 
+    /// 会话代次。每次 `startSession()` / `stopSession()` 自增。
+    ///
+    /// **为什么需要它**：`startSession()` 把 `startRunning()` 丢到全局队列上阻塞执行，收尾
+    /// 却是一个独立的 `Task { @MainActor }`。那个收尾可能在 `stopSession()`（它把
+    /// `isSessionRunning` 置回 false）**之后**才落地：`startRunning()` 还阻塞着时用户离开
+    /// 放大镜页、回来又重新 `startSession()`，而**第一次**那个块的收尾仍可能晚到——于是
+    /// `isSessionRunning == true` 而 `session.isRunning == false`，`MagnifierView` 的快门
+    /// `.disabled(vm.isCapturing || !vm.isSessionRunning)` 把它显示成**可用**，按下却撞上
+    /// `capturePhoto()` 的 `guard session.isRunning` 直接返回 nil：一个「看着能用、按了
+    /// 没反应」的控件。收尾时对一次代次即可丢弃过期的那次写入。
+    ///
+    /// 与 `ReaderLaunchCoordinator.generation` 同一套路。读写都在主 actor 上
+    /// （`startSession()` / `stopSession()` 的调用点，以及下面那个 `@MainActor` 闭包），
+    /// 沿用本文件既有的写法：不新引一层隔离，也不在闭包里读 `session.isRunning`。
+    private var sessionGeneration = 0
+
     let session = AVCaptureSession()
 
     /// 复用正在跑的 session 出图：比再起一套相机 UI 快，用户也不用第二次对准。
@@ -104,6 +120,9 @@ final class MagnifierViewModel: NSObject, ObservableObject {
             // 在 commitConfiguration 之前挂上输出：配置提交后再改要另开一次配置块。
             if session.canAddOutput(photoOutput) { session.addOutput(photoOutput) }
             session.commitConfiguration()
+            // 起这一次的后台块之前先占一个代次，收尾时对不上就丢弃（见 `sessionGeneration`）。
+            sessionGeneration += 1
+            let token = sessionGeneration
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 guard let self else { return }
                 self.session.startRunning()
@@ -111,11 +130,14 @@ final class MagnifierViewModel: NSObject, ObservableObject {
                 // 会阻塞，不能占住主线程），在这里直接赋值就是从后台线程发布一次
                 // SwiftUI 变更。两个 target 的默认隔离不同（见 `isSessionRunning` 的
                 // 注释），所以不靠隔离，统一显式回 `@MainActor` 再写。
-                Task { @MainActor in self.isSessionRunning = true }
+                Task { @MainActor in
+                    guard self.sessionGeneration == token else { return }
+                    self.isSessionRunning = true
+                }
             }
             applyZoom()
         } catch {
-            cameraError = "Failed to start camera"
+            cameraError = L10n.cameraError
         }
     }
 
@@ -150,6 +172,9 @@ final class MagnifierViewModel: NSObject, ObservableObject {
             device.unlockForConfiguration()
         }
         flashlightOn = false
+        // 与 `isSessionRunning = false` 同处自增：作废在途的那次 `startSession()` 收尾，
+        // 否则它会在会话已停之后把 `isSessionRunning` 写回 true（见 `sessionGeneration`）。
+        sessionGeneration += 1
         isSessionRunning = false
     }
 

@@ -129,9 +129,12 @@ struct ShareView: View {
     }
 
     private func loadImage(_ source: OCRImageSource) async {
+        // `Locale.preferredLanguages.first`，不是 `Locale.current`：后者按本 App 的本地化
+        // 过滤过，中文设备上返回 `en`，`.system` 就永远选不到中文模型（同 App 内
+        // `PresbyFriendApp.applyRecognitionLanguages()` 的理由与实测）。
         let service = TextRecognitionService(
             languages: RecognitionLanguage.visionLanguages(
-                systemLanguageCode: Locale.current.language.languageCode?.identifier,
+                systemLanguageCode: Locale.preferredLanguages.first,
                 preference: settings.recognitionLanguage))
 
         // 这里不能再用 `try?`：它把 Vision 的抛错折成 `[]`，和「这张图真的没有文字」
@@ -150,7 +153,14 @@ struct ShareView: View {
         if failed {
             error = L10n.ocrFail
         } else if joined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            error = L10n.ocrNoText
+            // 不能复用 `ocrNoText`：那句是「No text found in this picture. Showing the
+            // original — pinch to zoom.」，而本分支渲染的是 error 面板（上面一个警告三角
+            // + 文案 + Close），**根本没有原图**——它在对用户下一条做不到的指令。
+            // `ocrNoText` 的捏合提示在 App 内（PresbyFriendApp.swift 的兜底原图分支，
+            // 那里真有 ZoomableImageView）是**对的**，所以不能改它的值。
+            // 改用这个目前无人引用的通用键（六语言现成，值为「No text found on this
+            // screen」及其五语对应；「screen」用在图片场景下不够贴切，但不是假话）。
+            error = L10n.noTextFound
         } else {
             text = joined
         }

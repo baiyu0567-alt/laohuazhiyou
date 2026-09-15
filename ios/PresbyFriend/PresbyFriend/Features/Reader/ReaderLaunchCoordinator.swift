@@ -66,6 +66,18 @@ final class ReaderLaunchCoordinator: ObservableObject {
         generation += 1
         let token = generation
 
+        // 清掉上一次残留的内容。`isPresenting` 在这里**故意不动**：它可能还挂着上一次的
+        // 展示，而 `readerContent` 的第三个分支（PresbyFriendApp.swift 兜底那段黑底 +
+        // Close）正是为「isPresenting 为真但两条内容路径都为空」准备的出口。
+        //
+        // 不清的后果：`text`/`fallbackImage` 留着上一次的值，OCR 那 28–34s 里
+        // `readerContent` 会按**上一次**的内容选分支——字幕就会是上一篇的
+        // `ocr_no_text` / `ocr_fail`，而不是这一次的。今天够不到：两条 `open(image:)`
+        // 调用点（放大镜快门、读取 tab 的相册选择）都在全屏阅读页**底下**，阅读页开着时
+        // 点不到它们。但没有任何东西在保证这一点。
+        text = nil
+        fallbackImage = nil
+
         isPreparing = true
         recognitionFailed = false
         // 只有仍然是「当前这一次」时才由自己收尾，否则会把后来者的转圈关掉。
