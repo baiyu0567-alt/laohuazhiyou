@@ -22,7 +22,7 @@ Android 的核心能力是「在任何 app 里读字」，靠 `AccessibilityServ
 | Swift | 6.4 |
 | iOS SDK | 27.0 |
 | 模拟器 runtime | iOS 26.5 |
-| 部署目标 | 26.5 |
+| 部署目标 | 26.5 → **改为 16.0**（见「已决事项 1」） |
 | 构建 | ✅ BUILD SUCCEEDED，模拟器安装启动截图正常 |
 
 工程使用 Xcode 16+ 的 `PBXFileSystemSynchronizedRootGroup`：新增 `.swift` 文件
@@ -237,15 +237,18 @@ enum ReaderContent {
 | `Features/Reader/ReaderView.swift` | 接受 OCR 来源的内容 |
 | `shareextention/ShareView.swift` | 加图片 OCR 分支；补 `settings.load()`；去掉多余的 `NavigationStack` |
 | `shareextention/Info.plist` | 加 `NSExtensionActivationSupportsImageWithMaxCount` |
-| `project.pbxproj` | 加 `INFOPLIST_KEY_NSPhotoLibraryUsageDescription` |
+| `project.pbxproj` | 加 `INFOPLIST_KEY_NSPhotoLibraryUsageDescription`；`IPHONEOS_DEPLOYMENT_TARGET` 改为 16.0 |
+| `App/PresbyFriendApp.swift`、`ReaderView.swift`、`MagnifierView.swift` | 改写 5 处两参数 `onChange`（iOS 17+ → 兼容 16） |
 | 6 个 `Localizable.strings` | 新增字符串（en/de/fr/es/it/pt） |
 
 `ReadTabView.swift`（读取 tab 的界面）是新增文件，不列在上表。
 
-### 待确认的清理
+### 不修改
 
-根目录的 `PresbyFriend/`、`Shared/`、`ShareExtension/`（26 个文件）与 `ios/PresbyFriend/`
-下的对应文件**逐字节相同**，是早期脚手架残留。清理不影响 Android，但需单独确认后再动。
+| 文件 | 说明 |
+|---|---|
+| 根目录 `PresbyFriend/`、`Shared/`、`ShareExtension/` | 已确认构建不依赖，按决定保留（见「已决事项 3」） |
+| `ios/add_share_extension.rb` | 已失效的一次性脚本，本次不动。它引用的路径已过时，若将来仍需使用需先修正 |
 
 ## 数据流
 
@@ -357,12 +360,79 @@ iOS 16 起，程序化读 `UIPasteboard.general` 会弹系统对话框
 |---|---|---|
 | `UIPasteControl` 外观不可定制 | 按钮做不大，对老花眼不友好 | 真机先验证；退路是普通按钮 |
 | 首次 OCR 需联网（未验证） | 首次使用体验 | `prewarm()`；若无网则明确提示 |
-| 部署目标 26.5 覆盖面窄 | 老花眼用户多用旧手机 | **超出本次范围**，但建议评估下调 |
+| 部署目标下调到 16.0 后，需改写 5 处 `onChange` | 改写引入回归 | 改动机械（两参数 → 单参数），逐处核对 |
+| 根目录与 `ios/` 两份副本漂移 | 改了没生效，难排查 | 保留决定已定；建议加 README 说明 |
 | 根目录重复文件被误删 | 可能删错 | 清理前单独确认 |
 
-## 未决事项
+## 已决事项
 
-1. **首次 28s 是下载还是本地编译**——未验证。影响：首次使用是否依赖网络。
-2. **部署目标 26.5 是否下调**——Android `minSdk = 26`（2017 年设备），iOS 卡在最新系统，
-   两者对老花眼人群的覆盖面严重不对称。
-3. **根目录 26 个重复 iOS 文件**是否清理。
+### 1. 部署目标：26.5 → **16.0**
+
+原为 26.5，等于只支持最新系统。Android `minSdk = 26` 对应 Android 8.0（**2017 年**设备），
+两边覆盖面对老花眼人群严重不对称——而这个人群恰恰多用旧手机。
+
+| 候选 | 设备覆盖 | 代价 |
+|---|---|---|
+| **iOS 16.0（选定）** | iPhone 8 / X（2017 年） | 改 5 处 `onChange` |
+| iOS 17.0 | iPhone XS / XR（2018 年） | 0 |
+| iOS 15.0 | — | 丢 `UIPasteControl` / `PhotosPicker` / `DataScannerViewController` / `NavigationStack` |
+
+选 16.0 使两边设备覆盖对齐（都是 2017 年）。Xcode 27 支持的部署目标下限是 15.0，
+16.0 离边界有余量。
+
+**需要改写的 5 处**（两参数 `onChange(of:initial:_:)` 为 iOS 17+）：
+
+- `App/PresbyFriendApp.swift:45`、`:115`、`:119`
+- `Features/Reader/ReaderView.swift:56`
+- `Features/Magnifier/MagnifierView.swift:71`
+
+`Features/Settings/SettingsView.swift` 里的 6 处用的是老式单参数形式，无需改动。
+
+其余 iOS 17+ API 用量为 0。
+
+### 2. 首次 28s 是下载还是本地编译：**留待真机验证**
+
+未能在 macOS 上验证。已知证据：
+
+- `/System/Library/AssetsV2/com_apple_MobileAsset_LinguisticData` 下 68 个资产目录属主为
+  `_nsurlsessiond`（后台下载守护进程），且 `LinguisticAssetType => Optional`
+- `ar-SA` 首次 34.20s，之后 0.24s
+- **但新文件产生 ≠ 一定是下载**，本地编译同样会写缓存。从文件系统无法区分
+
+区分方法只有断网实测，而 Mac 的资产状态与 iPhone 完全不同，**Mac 上测出来不能代表手机**。
+
+**验证方式**：真机 + 全新安装 + 飞行模式 + 首次 OCR。
+
+设计上无论结果如何都需要 `prewarm()`；若确认依赖网络，还需为首次无网场景加明确提示。
+
+### 3. 根目录 26 个重复 iOS 文件：**保留不清理**
+
+已实测确认构建不依赖它们：
+
+| 证据 | 结果 |
+|---|---|
+| pbxproj 当前引用 | 仅 `path = PresbyFriend` 与 `path = shareextention`，解析到 `ios/PresbyFriend/` 下 |
+| pbxproj **历史上**是否引用过根目录 | **从未** |
+| 挪走这三个目录 + 清空 DerivedData 全量重编 | **BUILD SUCCEEDED** |
+
+"这些文件是必需的"这一印象的可能来源是 `ios/add_share_extension.rb`——一个一次性脚本，
+写着 `EXTENSION_SOURCE_DIR = '../../ShareExtension'`、`new_group('Shared', '../../Shared')`。
+但该脚本已经跑完（扩展已存在于 `ios/PresbyFriend/shareextention/`），且工程后来改用
+synchronized group，不经过脚本创建的 group 引用，脚本内的路径也已过时。
+
+保留成本为零，故保留。
+
+**副作用需记录**：根目录那份与 `ios/` 那份**会各自漂移**，改一边不影响另一边。
+将来若出现"改了没生效"，先怀疑这里。建议在根目录放一份 README 说明其为遗留副本、
+构建实际使用 `ios/` 下那份。
+
+## 真机验证清单
+
+以下只能在真机上确认，模拟器无法覆盖：
+
+| 项 | 方法 |
+|---|---|
+| 首次 OCR 是否依赖网络 | 全新安装 + 飞行模式 + 第一次 OCR |
+| `UIPasteControl` 外观/字号能否自定义 | 真机运行，检查能否做成大字按钮 |
+| 剪贴板粘贴是否真的不弹系统对话框 | 从微信复制文本 → 切到 App → 观察 |
+| `DataScannerViewController` 不可用时的降级 | 老设备（A12 以前）上确认 Live Text UI 隐藏而非静默失效 |
