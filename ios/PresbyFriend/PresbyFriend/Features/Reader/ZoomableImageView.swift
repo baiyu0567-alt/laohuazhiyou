@@ -41,9 +41,7 @@ struct ZoomableImageView: UIViewRepresentable {
         let coordinator = context.coordinator
         guard let imageView = coordinator.imageView else { return }
 
-        // 同一性比较：`UIImage` 是引用类型，`!=` 会走 `isEqual` 逐像素比较，
-        // 每次重绘都全图比一遍。
-        if imageView.image !== image {
+        if !coordinator.isShowingSameImage(as: image) {
             // 换图：旧图的缩放和位移对新图没有意义，回到基础缩放再重新布局。
             imageView.image = image
             scrollView.setZoomScale(scrollView.minimumZoomScale, animated: false)
@@ -62,6 +60,29 @@ struct ZoomableImageView: UIViewRepresentable {
 
     final class Coordinator: NSObject, UIScrollViewDelegate {
         var imageView: UIImageView?
+
+        /// 传进来的图跟当前显示的图是不是同一张。
+        ///
+        /// **不能只看 `UIImage` 的实例同一性。** `UIImage(cgImage:)` 每次调用都分配
+        /// 一个新的包装对象，而两个调用方都是在 view body 里现构造的
+        /// （`OCRImageSource.uiImage` 是计算属性、`UIImage(cgImage: source.image)`
+        /// 直接就 new），所以 `!==` 每次都为真——重绘又会把用户的缩放抹掉。
+        /// 它们包的却是同一个 `CGImage` 实例，所以比较里层。
+        ///
+        /// 先用实例同一性短路（调用方若自己缓存了 `UIImage`，这一步就够了，也最省）。
+        ///
+        /// **`cgImage` 的洞：** `CIImage` 支撑的 `UIImage` 其 `cgImage` 是 nil，
+        /// 两个 nil 会「相等」，从而把真正的换图误判成没换——新图永远不显示，
+        /// 比缩放被重置更糟。所以只有两边都拿得到 `CGImage` 时才敢走这条路，
+        /// 否则退回到实例同一性：宁可多布局一次，也不能不显示新图。
+        func isShowingSameImage(as image: UIImage) -> Bool {
+            guard let current = imageView?.image else { return false }
+            if current === image { return true }
+            guard let currentCG = current.cgImage, let newCG = image.cgImage else {
+                return false
+            }
+            return currentCG === newCG
+        }
 
         /// 现在能不能安全地重设尺寸。
         ///
