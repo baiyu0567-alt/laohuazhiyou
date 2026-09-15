@@ -24,7 +24,7 @@
 "no_text_found" = "Kein Text auf diesem Bildschirm gefunden";
 "ocr_language" = "Erkennungssprache";
 "ocr_language_chinese" = "Chinesisch";
-"ocr_language_desc" = "Wählen Sie die Sprache des fotografierten Textes. Die falsche Wahl lässt die Erkennung still fehlschlagen.";
+"ocr_language_desc" = "Wählen Sie die Sprache des fotografierten Textes. Die falsche Wahl lässt die Erkennung unbemerkt fehlschlagen.";
 "ocr_language_english" = "Englisch";
 "ocr_language_system" = "Wie System";
 "ocr_no_text" = "Kein Text im Bild gefunden. Das Original wird angezeigt — zum Zoomen aufziehen.";

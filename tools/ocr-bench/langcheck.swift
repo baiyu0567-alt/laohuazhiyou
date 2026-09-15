@@ -20,6 +20,8 @@ expect(RecognitionLanguage.visionLanguages(systemLanguageCode: "en-US",  prefere
 expect(RecognitionLanguage.visionLanguages(systemLanguageCode: "de-DE",  preference: .system), ["en-US"],   "system/de-DE")
 expect(RecognitionLanguage.visionLanguages(systemLanguageCode: "zh-Hans",preference: .system), ["zh-Hans"], "system/zh-Hans")
 expect(RecognitionLanguage.visionLanguages(systemLanguageCode: "zh-Hant",preference: .system), ["zh-Hans"], "system/zh-Hant")
+expect(RecognitionLanguage.visionLanguages(systemLanguageCode: "ZH-Hans",preference: .system), ["zh-Hans"], "system/ZH-Hans")
+expect(RecognitionLanguage.visionLanguages(systemLanguageCode: "zh-CN",  preference: .system), ["zh-Hans"], "system/zh-CN")
 
 // 手动覆盖优先于系统
 expect(RecognitionLanguage.visionLanguages(systemLanguageCode: "en-US",  preference: .chinese), ["zh-Hans"], "override/中文")
