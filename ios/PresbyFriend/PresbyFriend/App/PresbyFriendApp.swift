@@ -77,6 +77,13 @@ struct ContentView: View {
     /// 这道闸省掉的是一次**无谓的调用**。
     @State private var appliedRecognitionLanguage: RecognitionLanguage?
 
+    /// URL 分享进来、但没能得到可读正文时，给用户一个看得见的交代。
+    ///
+    /// 以前这里什么都不发生：`if text.count > 50` 没有 else，提取失败也只写日志。
+    /// 同一个条件在分享扩展里是报错的（`ShareView.swift:173-177`，同一个 50 字阈值、
+    /// 同一个键），App 里却是静默——用户主动分享后毫无反应，等于「App 坏了」。
+    @State private var showingURLExtractError = false
+
     private static let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "com.presbyfriend",
         category: "url-extract")
@@ -143,6 +150,9 @@ struct ContentView: View {
                 .zIndex(100)
             }
         }
+        .alert(L10n.urlExtractFail, isPresented: $showingURLExtractError) {
+            Button(L10n.close, role: .cancel) {}
+        }
         .environmentObject(coordinator)
         .task {
             // 启动时后台准备识别模型，避免第一次按快门等 28s。
@@ -189,9 +199,17 @@ struct ContentView: View {
                     let text = try await extractor.extract(from: url.absoluteString)
                     if text.count > 50 {
                         coordinator.open(text: text)
+                    } else {
+                        // 提取成功但正文太短：扩展在同样条件下报的是同一个键，App 不能再静默。
+                        showingURLExtractError = true
                     }
                 } catch {
                     Self.logger.error("URL extraction failed for \(url.absoluteString, privacy: .public): \(String(describing: error))")
+                    // 抛错同样是「用户分享了、什么都没发生」。**但取消不是失败**：任务被取消时
+                    // `extract` 会抛 CancellationError，那不是错误，不该弹窗。
+                    if !(error is CancellationError) && !Task.isCancelled {
+                        showingURLExtractError = true
+                    }
                 }
             }
         }

@@ -128,7 +128,7 @@ struct SettingsView: View {
             }
             .navigationTitle(L10n.settingsTab)
             .alert(L10n.resetConfirm, isPresented: $showResetAlert) {
-                Button("Cancel", role: .cancel) {}
+                Button(L10n.close, role: .cancel) {}
                 Button(L10n.resetSettings, role: .destructive) {
                     settings.reset()
                     vm.load(from: settings)
