@@ -51,9 +51,12 @@ final class MagnifierViewModel: NSObject, ObservableObject {
     /// `capturePhoto()` 的 `guard session.isRunning` 直接返回 nil：一个「看着能用、按了
     /// 没反应」的控件。收尾时对一次代次即可丢弃过期的那次写入。
     ///
-    /// 与 `ReaderLaunchCoordinator.generation` 同一套路。读写都在主 actor 上
-    /// （`startSession()` / `stopSession()` 的调用点，以及下面那个 `@MainActor` 闭包），
-    /// 沿用本文件既有的写法：不新引一层隔离，也不在闭包里读 `session.isRunning`。
+    /// 与 `ReaderLaunchCoordinator.generation` 同一套路。**在 app target 里**读写都在主
+    /// actor 上（`startSession()` / `stopSession()` 的调用点，以及下面那个 `@MainActor`
+    /// 闭包）。本文件同时被扩展 target 编译，那边没有默认隔离（见文件头），所以这条隔离
+    /// 论证只对 app target 成立——扩展里的正确性不靠它，靠的是扩展侧根本没有
+    /// `MagnifierViewModel` 的调用点。沿用本文件既有的写法：不新引一层隔离，也不在闭包
+    /// 里读 `session.isRunning`。
     private var sessionGeneration = 0
 
     let session = AVCaptureSession()

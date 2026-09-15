@@ -131,7 +131,7 @@ struct ShareView: View {
     private func loadImage(_ source: OCRImageSource) async {
         // `Locale.preferredLanguages.first`，不是 `Locale.current`：后者按本 App 的本地化
         // 过滤过，中文设备上返回 `en`，`.system` 就永远选不到中文模型（同 App 内
-        // `PresbyFriendApp.applyRecognitionLanguages()` 的理由与实测）。
+        // `ContentView.applyRecognitionLanguages()` 的理由与实测）。
         let service = TextRecognitionService(
             languages: RecognitionLanguage.visionLanguages(
                 systemLanguageCode: Locale.preferredLanguages.first,
