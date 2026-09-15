@@ -189,6 +189,8 @@ struct ContentView: View {
 // MARK: - Magnifier Tab (wraps MagnifierView + handles simulator)
 
 struct MagnifierTab: View {
+    /// 由 `ContentView` 的 `ZStack` 上挂的 `.environmentObject(coordinator)` 提供。
+    @EnvironmentObject private var coordinator: ReaderLaunchCoordinator
     let onTextDetected: (String) -> Void
     let settings: SettingsModel
     @State private var showMagnifier = false
@@ -221,7 +223,14 @@ struct MagnifierTab: View {
             .padding()
             .navigationTitle(L10n.appName)
             #else
-            MagnifierView(onTextDetected: onTextDetected)
+            MagnifierView(
+                onTextDetected: onTextDetected,
+                onCapture: { source in
+                    // `onCapture` 是同步回调，`open(image:)` 是 async，所以要起一个 Task。
+                    // 这个 Task 是不受结构化管理的一次性任务，没有任何人持有它的句柄。
+                    Task { await coordinator.open(image: source) }
+                }
+            )
             #endif
         }
     }

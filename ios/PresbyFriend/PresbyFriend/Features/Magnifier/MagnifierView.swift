@@ -6,7 +6,12 @@ struct MagnifierView: View {
     @StateObject private var vm = MagnifierViewModel()
     @State private var selectedText: String?
     @State private var dataScannerAccessGranted = false
+    /// 按下快门后那一次拍照 + 交棒。存下句柄是为了离开页面时能取消它：
+    /// `onDisappear` 会 `stopSession()`，此后拍照回调不再保证会来，取消才能让
+    /// `capturePhoto()` 里在途的 continuation 立刻以「没拍到」收尾。
+    @State private var captureTask: Task<Void, Never>?
     let onTextDetected: ((String) -> Void)?
+    let onCapture: ((OCRImageSource) -> Void)?
 
     private var isSimulator: Bool {
         #if targetEnvironment(simulator)
@@ -29,7 +34,7 @@ struct MagnifierView: View {
                         .font(.title2)
                         .multilineTextAlignment(.center)
                         .foregroundColor(.secondary)
-                    Text("Use a real device to magnify text with the camera. On simulator, copy text and use \"Read Aloud\" from the Home tab.")
+                    Text("Use a real device to magnify text with the camera. On the simulator, open the Read tab to paste text or pick a photo, then read it aloud.")
                         .font(.body)
                         .multilineTextAlignment(.center)
                         .foregroundColor(.secondary)
@@ -80,6 +85,35 @@ struct MagnifierView: View {
                     .padding(.horizontal)
 
                     Button {
+                        captureTask = Task {
+                            // `capturePhoto()` 已经用单飞闸挡住重复点击；这里再挡一次
+                            // 是取消时的交棒：本 Task 被取消（离开页面）就不再进阅读模式。
+                            guard let source = await vm.capturePhoto(),
+                                  !Task.isCancelled else { return }
+                            onCapture?(source)
+                        }
+                    } label: {
+                        ZStack {
+                            if vm.isCapturing {
+                                // 「已经按下去了」要有看得见的样子，否则第二下点击
+                                // 和「什么都没发生」长得一模一样。
+                                ProgressView()
+                                    .tint(.white)
+                            } else {
+                                Image(systemName: "camera.fill")
+                                    .font(.system(size: 30))
+                                    .foregroundColor(.white)
+                            }
+                        }
+                        .frame(width: 76, height: 76)
+                        .background(Color.white.opacity(vm.isCapturing ? 0.15 : 0.25))
+                        .overlay(Circle().stroke(Color.white, lineWidth: 4))
+                        .clipShape(Circle())
+                    }
+                    .disabled(vm.isCapturing)
+                    .accessibilityLabel(L10n.shutter)
+
+                    Button {
                         vm.toggleFlashlight()
                     } label: {
                         Image(systemName: vm.flashlightOn ? "flashlight.on.fill" : "flashlight.off.fill")
@@ -110,6 +144,10 @@ struct MagnifierView: View {
                                        DataScannerViewController.isAvailable
         }
         .onDisappear {
+            // 先取消在途的拍照，再停会话：停完之后拍照回调不再保证会来，靠取消
+            // （`capturePhoto()` 的取消处理器）把那一按收尾。
+            captureTask?.cancel()
+            captureTask = nil
             vm.stopSession()
         }
     }
