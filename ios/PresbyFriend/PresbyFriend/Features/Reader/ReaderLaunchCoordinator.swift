@@ -23,6 +23,13 @@ final class ReaderLaunchCoordinator: ObservableObject {
 
     private let ocr = TextRecognitionService()
 
+    /// 每次发起或取消都自增。OCR 完成时对不上就说明这次结果已经过期。
+    ///
+    /// OCR 期间阅读页并没有展示（只有 `isPreparing` 为真），所以放大镜页上任何
+    /// 取消操作都会落在这个窗口里：`close()` 之后，在途的 `open(image:)` 恢复执行。
+    /// 没有这道闸，它会把已经被用户关掉的阅读页重新推上来。
+    private var generation = 0
+
     /// 语言数组的构造在 `RecognitionLanguage` 里，这里只是转发给 OCR 服务。
     func updateLanguages(_ languages: [String]) {
         ocr.languages = languages
@@ -39,17 +46,27 @@ final class ReaderLaunchCoordinator: ObservableObject {
     func open(text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        // 文本直接有了，不需要等 OCR：作废在途的那次，别让它回来覆盖。
+        generation += 1
+        isPreparing = false
         fallbackImage = nil
         self.text = trimmed
         isPresenting = true
     }
 
     func open(image source: OCRImageSource) async {
+        generation += 1
+        let token = generation
+
         isPreparing = true
-        defer { isPreparing = false }
+        // 只有仍然是「当前这一次」时才由自己收尾，否则会把后来者的转圈关掉。
+        defer { if token == generation { isPreparing = false } }
 
         let blocks = (try? await ocr.recognize(source)) ?? []
         let joined = blocks.map(\.text).joined(separator: "\n")
+
+        // 等待期间用户可能已经关掉、或又开了别的。过期的结果一律不许放行。
+        guard token == generation else { return }
 
         if joined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             // 空结果不算错误：兜底显示原图，让用户自己放大看。
@@ -63,7 +80,10 @@ final class ReaderLaunchCoordinator: ObservableObject {
     }
 
     func close() {
+        // 作废在途的 OCR，并收掉它的转圈——否则被取消的那次会把「正在准备」留在屏幕上。
+        generation += 1
         isPresenting = false
+        isPreparing = false
         text = nil
         fallbackImage = nil
     }

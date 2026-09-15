@@ -38,8 +38,24 @@ struct ZoomableImageView: UIViewRepresentable {
     }
 
     func updateUIView(_ scrollView: UIScrollView, context: Context) {
-        context.coordinator.imageView?.image = image
-        context.coordinator.layout(in: scrollView)
+        let coordinator = context.coordinator
+        guard let imageView = coordinator.imageView else { return }
+
+        // 同一性比较：`UIImage` 是引用类型，`!=` 会走 `isEqual` 逐像素比较，
+        // 每次重绘都全图比一遍。
+        if imageView.image !== image {
+            // 换图：旧图的缩放和位移对新图没有意义，回到基础缩放再重新布局。
+            imageView.image = image
+            scrollView.setZoomScale(scrollView.minimumZoomScale, animated: false)
+            coordinator.layout(in: scrollView)
+            return
+        }
+
+        // 图没变。**只有确认没有 transform 时才能重新布局。**
+        // SwiftUI 重绘不是用户操作，不得把用户的缩放/位移抹掉。
+        if coordinator.isAtBaseScale(in: scrollView) {
+            coordinator.layout(in: scrollView)
+        }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -47,10 +63,28 @@ struct ZoomableImageView: UIViewRepresentable {
     final class Coordinator: NSObject, UIScrollViewDelegate {
         var imageView: UIImageView?
 
+        /// 现在能不能安全地重设尺寸。
+        ///
+        /// `UIScrollView` 的缩放是靠给被缩放的子视图加 **transform** 实现的。
+        /// UIKit 明确规定：`transform` 非 identity 时 `frame` 未定义、不得修改。
+        /// 一旦违反，图被打回视口大小而 `zoomScale` 仍报告放大后的值——
+        /// 视觉上没放大、逻辑上放大了，下一次双击就会走错分支（还原而不是放大）。
+        /// 所以判据是 transform 是否 identity，缩放倍率只作辅助（回弹时倍率会
+        /// 短暂低于最小值，但 transform 已经存在）。
+        func isAtBaseScale(in scrollView: UIScrollView) -> Bool {
+            guard let imageView else { return false }
+            return imageView.transform.isIdentity
+                && scrollView.zoomScale <= scrollView.minimumZoomScale + 0.0001
+        }
+
         func layout(in scrollView: UIScrollView) {
             guard let imageView else { return }
             scrollView.frame = scrollView.bounds
-            imageView.frame = scrollView.bounds
+            // 用 bounds + center 而不是 frame：即便万一在 transform 存在时被调到，
+            // 这两个属性仍是良定义的。
+            imageView.bounds = CGRect(origin: .zero, size: scrollView.bounds.size)
+            imageView.center = CGPoint(x: scrollView.bounds.midX,
+                                       y: scrollView.bounds.midY)
             scrollView.contentSize = scrollView.bounds.size
         }
 

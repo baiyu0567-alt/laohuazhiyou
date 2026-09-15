@@ -42,4 +42,29 @@ struct OCRImageSource {
         }
         return OCRImageSource(image: cg, orientation: orientation)
     }
+
+    /// 转成可以直接显示的 `UIImage`。
+    ///
+    /// **必须带上方向。** `CGImageSourceCreateImageAtIndex` 不会应用 EXIF 方向，
+    /// 而 `UIImage(cgImage:)` 默认按 `.up` 解释——竖拍照片会整张躺倒。
+    /// OCR 路径是把方向交给 `VNImageRequestHandler` 处理的；显示路径只有这里能补上，
+    /// 所以这是全项目唯一的方向转换点，调用方不该再自己拼 `UIImage`。
+    ///
+    /// 下面的 switch 是上面 `from(uiImage:)` 的逆映射。两个枚举的 case 名字一一对应
+    /// （raw value 不同，语义相同），所以形状完全一致——不要另立一套约定。
+    var uiImage: UIImage {
+        let orientation: UIImage.Orientation
+        switch self.orientation {
+        case .up:            orientation = .up
+        case .down:          orientation = .down
+        case .left:          orientation = .left
+        case .right:         orientation = .right
+        case .upMirrored:    orientation = .upMirrored
+        case .downMirrored:  orientation = .downMirrored
+        case .leftMirrored:  orientation = .leftMirrored
+        case .rightMirrored: orientation = .rightMirrored
+        @unknown default:    orientation = .up
+        }
+        return UIImage(cgImage: image, scale: 1, orientation: orientation)
+    }
 }
