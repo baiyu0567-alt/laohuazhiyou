@@ -68,7 +68,12 @@ struct ContentView: View {
     /// 后者的 `load()` 才构成一次真实变化，`settings.recognitionLanguage` 的
     /// `.onChange` 也才会真触发一次（从没改过这项设置的用户，`load()` 写回的还是
     /// `.system`，值没变，回调根本不发生）。前者需要补一次预热；后者由 `.task`
-    /// 里那次负责。不区分的话，存储值非 `.system` 的用户每次冷启动会预热两遍。
+    /// 里那次负责。不区分的话，存储值非 `.system` 的用户每次冷启动会多打一次
+    /// `prewarm()`——两份数组逐字相同（都出自 `load()` 之后的
+    /// `settings.recognitionLanguage`），但幂等那道 guard 只在头一次跑**完**之后才拦得住
+    /// （`TextRecognitionService.swift:129-131`），这次调用落在预热还在途的窗口里。
+    /// 代价只是第二次 `recognize` 排在串行 `queue` 上、模型已热之后那实测的 0.1–0.35s
+    /// （`:124`），不是再准备一遍模型：这道闸省掉的是一次**无谓的调用**。
     @State private var appliedRecognitionLanguage: RecognitionLanguage?
 
     private static let logger = Logger(
