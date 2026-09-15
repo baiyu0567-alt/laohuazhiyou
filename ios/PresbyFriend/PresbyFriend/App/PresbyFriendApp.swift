@@ -96,6 +96,20 @@ struct ContentView: View {
                     Text(L10n.ocrPreparing)
                         .font(.title3)
                         .foregroundColor(.white)
+                    // 取消出口。首用 OCR 实测 28–34s（见 TextRecognitionService.prewarm
+                    // 的注释），不能把老花眼用户困在一块完全无响应的半黑屏幕里。
+                    // 取消走 close()：它会自增 generation，在途的那次 OCR 回来时
+                    // 落在 open(image:) 的 guard 上被丢掉，不会再弹出阅读页。
+                    // 字号与点击区都做大——小号暗淡的「×」正是这里要避免的东西。
+                    // frame 放在 Button 的 label 内部，这样 .borderedProminent 的底色
+                    // 本身就是 180×64，点击区不留任何歧义。
+                    Button(action: { coordinator.close() }) {
+                        Text(L10n.close)
+                            .font(.title2)
+                            .frame(minWidth: 180, minHeight: 64)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
                 .padding(28)
                 .background(.ultraThinMaterial)
