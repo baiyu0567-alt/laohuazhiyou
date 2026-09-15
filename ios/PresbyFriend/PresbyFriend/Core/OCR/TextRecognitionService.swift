@@ -14,12 +14,39 @@ final class TextRecognitionService {
 
     /// 当前生效的识别语言。由调用方根据 `RecognitionLanguage.visionLanguages` 设置——
     /// 本服务不猜，猜错的代价是静默输出垃圾。
-    var languages: [String]
+    ///
+    /// **并发安全**：`prewarm()` 经 `Task.detached` 在后台线程读它，而设置页改语言时
+    /// `ReaderLaunchCoordinator.updateLanguages` 在主线程写它——两者可以同时发生。
+    /// 并发读写同一个 `Array` 是未定义行为：写方的赋值会连同 COW 缓冲一起换掉，
+    /// 读方可能拿着被释放/半改的缓冲，**可能崩溃**，不只是取到旧值。所以用一把
+    /// 独立的锁把属性访问串行化。
+    ///
+    /// **为什么不复用下面那把 `queue`**：`queue` 上跑的是整段 Vision 请求，
+    /// 首次预热要占住它 28–34s（见 `prewarm()` 的注释）。若 getter/setter 走
+    /// `queue.sync`，主线程改一次语言就会卡到那次识别结束——设置页冻住，甚至被
+    /// watchdog 杀掉。那把队列是「OCR 工作」的串行化，不是「属性访问」的锁。
+    /// 用独立的锁也顺带保证没有任何 `queue.sync` 会嵌在 `queue` 自己的工作里。
+    var languages: [String] {
+        get {
+            languagesLock.lock()
+            defer { languagesLock.unlock() }
+            return storedLanguages
+        }
+        set {
+            languagesLock.lock()
+            defer { languagesLock.unlock() }
+            storedLanguages = newValue
+        }
+    }
+
+    /// 由 `languagesLock` 保护。只经上面的计算属性访问。
+    private var storedLanguages: [String]
+    private let languagesLock = NSLock()
 
     private let queue = DispatchQueue(label: "com.presbyfriend.ocr")
 
     init(languages: [String] = ["en-US"]) {
-        self.languages = languages
+        self.storedLanguages = languages
     }
 
     func recognize(_ source: OCRImageSource) async throws -> [RecognizedBlock] {
