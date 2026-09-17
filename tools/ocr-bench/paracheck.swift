@@ -55,15 +55,29 @@ guard !args.isEmpty else {
 let path = args[0]
 let languages = args.count > 1 ? Array(args.dropFirst()) : ["zh-Hans", "en-US"]
 
-guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil),
-      let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+// **方向必须走生产代码，不能在这里自己拼。** 这个工具原先直接用
+// `CGImageSourceCreateImageAtIndex` 拿 `CGImage`、再传 `VNImageRequestHandler(cgImage:options:)`
+// ——**没有方向**。而 iPhone 拍出来的照片几乎都带 EXIF 方向（传感器是横向的），
+// `CGImageSourceCreateImageAtIndex` **不应用**它，于是这里量到的是一张**躺倒的图**：
+// 每个「视觉行」的包围盒变成又高又窄的竖条，分栏判据拿到的是旋转了 90° 的几何。
+//
+// 后果是这一层**测的不是 App 做的事**：App 走 `OCRImageSource.from(data:)` 读方向、再
+// `VNImageRequestHandler(cgImage:orientation:)` 交给 Vision，而这里漏了那一步。
+// 一张真实的两栏照片在这上面跑出 29 段，看着像分栏彻底坏了——其实坏的是这个工具。
+// 现在直接调生产函数，方向这件事就只有一个实现，不会再分家。
+guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+      let source = OCRImageSource.from(data: data) else {
     print("❌ 无法读取图片: \(path)")
     exit(1)
 }
+let image = source.image
 
 print("══════════════════════════════════════════")
 print("文件: \((path as NSString).lastPathComponent)  (\(image.width)x\(image.height))")
 print("语言: \(languages.joined(separator: ", "))")
+// 方向要**打出来**：它是「同一张照片看起来完全不同」的开关，出问题时第一个要排除的变量。
+// 归一化坐标只在方向被正确应用之后才有意义，所以这一行不是装饰。
+print("方向: \(source.orientation.rawValue)  （EXIF，1 = 像素已正立）")
 print("══════════════════════════════════════════")
 
 let request = VNRecognizeTextRequest()
@@ -73,7 +87,9 @@ request.usesLanguageCorrection = true
 
 let start = Date()
 do {
-    try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
+    try VNImageRequestHandler(cgImage: source.image,
+                              orientation: source.orientation,
+                              options: [:]).perform([request])
 } catch {
     print("❌ 识别失败: \(error)")
     exit(1)

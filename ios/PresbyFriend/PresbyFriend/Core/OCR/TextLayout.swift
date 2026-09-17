@@ -127,18 +127,35 @@ enum TextLayout {
     /// 候选空档。有行跨过某条缝时，那条缝**依然是一个区间**，只是「跨越行数」不为零
     /// ——这两个量随后一起用来排名。
     ///
-    /// 三件事依次筛：
+    /// 两道筛子依次筛：
     ///
-    /// 1. **够宽**（`gutterMinimumWidth`）、**在页内**（左右两侧的留白不是栏缝）；
-    /// 2. **跨越它的行不能太多**（`columnCrossingFraction`）——跨过栏缝的那几行是
-    ///    通栏行，一两条正常，多到几十条就说明这条缝不是栏缝；
-    /// 3. **两侧都要真的成栏**（`columnBalanceFraction`）。没有这一条，一栏里参差的
+    /// 1. **在页内**（左右两侧的留白不是栏缝）、**跨越它的行不能太多**
+    ///    （`columnCrossingFraction`）——跨过栏缝的那几行是通栏行，一两条正常，
+    ///    多到几十条就说明这条缝不是栏缝；
+    /// 2. **两侧都要真的成栏**（`columnBalanceFraction`）。没有这一条，一栏里参差的
     ///    右边界会造出假空档（某行比别的行短一截），而那种空档两侧是「一行 vs 其余
     ///    所有行」，不是两栏。
     ///
-    /// 排名**先比宽度，再比跨越行数**。顺序反了会挑走题头旁边那条窄缝：它跨越行数
-    /// 为 0，比真栏缝「更干净」——但真栏缝**总是更宽**，因为题头至少跨过了右栏的
-    /// 左边缘（题头左边缘必然落在右栏左边缘的左边，否则它就不算跨过栏缝）。
+    /// **宽度只排名，不设下限。** 这里原先还有一条绝对下限（`gutterMinimumWidth`，
+    /// 页宽的 2%），它是在合成图上定的，而真机照片上的真栏缝**窄得多**：一张两栏教材
+    /// 页实测只有 **0.4%**——左栏最宽的一行到 0.5320，右栏最靠左的一行从 0.5360 起
+    /// ——全页每一条候选都 ≤ 1.6%。下限于是把真缝连同所有候选一起否掉，整页退成一块、
+    /// 两栏逐行交错，正是用户报回来的那个样子。阈值被合成图带偏，这已经是第三次，所以
+    /// 这次不是把 0.02 改小，而是**取消它**：它原本要挡的「栏内参差的右边界」由上面
+    /// 第 2 条挡，宽度不承担筛选。再定一个小一点的数，就又是一次「照着一张图配参数」。
+    ///
+    /// 排名**先比两侧里少的那一边，再比宽度，最后比跨越行数**。
+    ///
+    /// 先比平衡，是因为它直接对应「这是一条把页面分成两半的缝」：真栏缝把行分成大致相当
+    /// 的两堆，别的位置只会把一小撮行孤立出来。真机那张照片上真缝的少边是 28 行（全页
+    /// 61 行），最接近的假缝只有 18 行——差 10 行，很稳。**反过来先比宽度就会挑错**：
+    /// 左栏右边界参差，中间裂出一条 0.9% 的空档，比真缝（0.4%）宽一倍多，而且跨越行数
+    /// 15 恰好卡在预算 15.25 之下，两条筛子都过得去——它会赢。真缝赢在平衡上，不在宽度上。
+    ///
+    /// 宽度退为**平局判据**：平衡相当的几条候选（真机上是相邻的几条，同一条栏缝的不同
+    /// 画法）里取空档最宽的那条，最不容易有杂框贴在边上。这一条仍要留着，
+    /// `centeredHeadingPage` 那条夹具就靠它：题头旁边那条窄缝与真栏缝平衡相同，只有宽度
+    /// 分得开。
     static func verticalGutters(in lines: [TextLine]) -> [(start: Double, end: Double)] {
         let boundaries = Set(lines.flatMap { [$0.minX, $0.maxX] }).sorted()
         guard let pageStart = boundaries.first, let pageEnd = boundaries.last,
@@ -147,10 +164,9 @@ enum TextLayout {
         let crossingBudget = Double(lines.count) * columnCrossingFraction
         let balanceFloor = max(2.0, Double(lines.count) * columnBalanceFraction)
 
-        var candidates: [(start: Double, end: Double, width: Double, crossings: Int)] = []
+        var candidates: [(start: Double, end: Double, width: Double, crossings: Int, balance: Int)] = []
         for (start, end) in zip(boundaries, boundaries.dropFirst()) {
             let width = end - start
-            guard width >= gutterMinimumWidth else { continue }
             guard start > pageStart, end < pageEnd else { continue }
 
             let mid = (start + end) / 2
@@ -161,13 +177,15 @@ enum TextLayout {
             // `minX >= end`），否则这里算出来的平衡与切出来的两侧对不上。
             let left = lines.filter { $0.maxX <= start }.count
             let right = lines.filter { $0.minX >= end }.count
-            guard Double(min(left, right)) >= balanceFloor else { continue }
+            let balance = min(left, right)
+            guard Double(balance) >= balanceFloor else { continue }
 
-            candidates.append((start, end, width, crossings))
+            candidates.append((start, end, width, crossings, balance))
         }
 
         return candidates
             .sorted { a, b in
+                if a.balance != b.balance { return a.balance > b.balance }
                 if a.width != b.width { return a.width > b.width }
                 if a.crossings != b.crossings { return a.crossings < b.crossings }
                 return a.start < b.start
@@ -266,16 +284,24 @@ enum TextLayout {
 
         /// 这段的起点是不是新的一段。
         ///
-        /// 三条信号，**任一成立即断开**：
+        /// 四条信号，**任一成立即断开**：
         ///
         /// 1. **间距明显大于正常行距**——段与段之间的空档，最直接的证据。
         /// 2. **首行缩进**——比本页左边界多缩进一个多字宽。
         /// 3. **上一行是短行、且这一行回到左边界**——上一行没写满就换行，说明那一段写完了。
         ///    居中标题也满足「短行」，但**不满足**「这一行回到左边界」，
         ///    所以标题不会被误判成段尾。
+        /// 4. **横向完全不相交**——两行左右错开、一个字都不重叠，那它们不是上下相邻的两行。
         func startsNewParagraph(upper: TextLine, lower: TextLine) -> Bool {
+            // **要求间距为正。** 上下两行的包围盒**叠在一起**时（`gap <= 0`），
+            // 「空档比正常行距大」这句话本身就没有意义——可它照样成立：真机那张照片上
+            // `normalGap` 量出来是 **-0.019**（同一视觉行被 Vision 切成几块，各块高度
+            // 不一，底边互相穿插），阈值于是成了 -0.019 + 0.35×行高 ≈ 0，
+            // **每一个负间距都被判成段间距**。实测这一段就让「…累积形」与
+            // 「成的，是…」——同一段的两行——被拆开。叠着的两行之间没有空档，
+            // 就不可能隔着段间距：这是恒等式，不是阈值。
             let gap = lower.top - upper.bottom
-            if gap > normalGap + upper.height * TextLayout.heightFactor {
+            if gap > 0, gap > normalGap + upper.height * TextLayout.heightFactor {
                 return true
             }
 
@@ -287,6 +313,21 @@ enum TextLayout {
             if typicalRightEdge > 0,
                upper.maxX < typicalRightEdge * TextLayout.shortLineFraction,
                lower.minX <= upper.minX + characterWidth * TextLayout.indentCharacters {
+                return true
+            }
+
+            // 同一条文字流里，相邻两行的横向区间总要重叠：行首落在同一个左边距上，
+            // 行尾有长有短，短的落在长的里面。**一个字都不重叠的两行，不是上下相邻的
+            // 两行**，它们只是碰巧被归进了同一块。
+            //
+            // 真机那张照片把对面那页的一列残字也拍了进来（「小」「只」「所」「清」，
+            // x 在 0–2%），而本页正文从 8% 起。残字按底边排进左栏的行序，于是
+            // 「流派的生成乃至传」后面直接接了一个「小」——**句子中间被塞进一个别页的
+            // 字**。上面三条一条都拦不住它：它离上一行不远不近，既不缩进也算不上短行。
+            //
+            // **宁可多断一段，也不要把别处的字粘进句子里。** 多一段只是读起来顿一下，
+            // 粘错字是把正文改掉了——两个方向的代价不对称，这条判据只朝安全的那边倒。
+            if lower.minX > upper.maxX || lower.maxX < upper.minX {
                 return true
             }
 
@@ -344,13 +385,6 @@ enum TextLayout {
     }
 
     // MARK: - 常数（全部相对，见文件头的「阈值全部是相对的」）
-
-    /// 竖缝至少要有页面宽度的这个比例，才算栏间距。
-    ///
-    /// 取这么小是有意的：真正的栏间距远宽于此（通常 5% 以上）。**光靠宽度不够**
-    /// ——一栏里参差的右边界也会裂出这个量级的空档，所以另有两道筛子（见
-    /// `columnBalanceFraction` 与 `columnCrossingFraction`），宽度只负责在候选之间排名。
-    static let gutterMinimumWidth = 0.02
 
     /// 一条候选栏缝允许被多大比例的行跨过。
     ///
