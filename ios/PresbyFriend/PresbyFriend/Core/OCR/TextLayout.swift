@@ -184,26 +184,81 @@ enum TextLayout {
         return lines.filter { !dropped.contains($0) }
     }
 
-    /// 一侧（单栏）里的页边残字：整行落在该侧**中位左边界**的左边，或中位右边界的右边。
+    /// 一侧（单栏）里的页边残字：**贴在这一侧最外面、和主体不相接的一小撮**。
     ///
-    /// 判据取这一侧自己的中位数，**没有绝对坐标**：页面大小、栏宽、字号都不必知道，
-    /// 与文件头那条「阈值全部是相对的」一致。
+    /// 判据是**结构**的，不是统计的：把这一侧的行按「横向空白」连成几团
+    /// （`horizontalBlocks`），最外侧那一团只要不是最大的一团，它就是页边残字。
+    /// 全相对，没有绝对坐标，也没有绝对宽度——与文件头那条一致。
     ///
-    /// 两头都要**整行在外面**（`maxX < 左中位` **且** `minX < 左中位`）：只要有一端
-    /// 伸进了正文区，那它就不是「贴在边上的一列残字」，判据就朝安全的那边倒——宁可漏杀。
+    /// **为什么不是「中位数之外」**（原来是这个写法）：中位数只有当这一侧是
+    /// 「一整栏、行行等宽」时才等于正文边缘。页面上行宽参差时它落在**页面中间**，
+    /// 于是把正文的右半边整片当成页边残字。真机那张英语卷子（IMG_0004）就是这样：
+    /// 上半页是通栏正文（x 0.10–0.90），下半页是**两栏的选择项**（x 0.11–0.48 与
+    /// 0.50–0.80），左侧 46 行的中位右界因此落在 **0.448**——比正文右缘窄了一半。
+    /// 结果表头那一行（词数 / 建议用时 / 实际用时 / 正确率 / 348 / 8 mins / mins / /4）
+    /// 和两条选项（`B. He looks forward…` / `D. He is attached…`）**整行被当页边删掉**，
+    /// 共 11 条真实内容。这不是放宽或收紧某个阈值能救的：**这一页没有任何一条缝
+    /// 能救它**——换成那条真正的页边缝（0.909–0.944），左侧 60 行的中位右界是 0.494，
+    /// 照样吃掉 9 条。行宽参差这件事本身就把中位数废掉了，所以换掉的是判据本身。
     ///
-    /// **要删的条数达到这一侧的一半就整个放弃。** 中位数会被残字自己带偏：残字一多，
-    /// 「中位左边界」就落到残字中间去，判据不再代表正文边缘。删掉正文比漏掉几个残字
-    /// 严重得多，所以这条闸门是硬的。
+    /// 同一张照片上实测两种判据（`horizontalBlocks` 的相接判据就是同一行碎片之间
+    /// 那条 `fragmentGapFraction`）：**现状丢 11 条 → 连通丢 0 条**；
+    /// 而另两张上**逐个相同**——IMG_0002（真·对开页边）从左缘 0.000–0.021 的那一撮
+    /// （小 / 只 / 所 / 清 / 小）丢 5 条，与中位判据一模一样；IMG_0003 两边都是 0 条。
+    /// 也就是说改判据只在**中位判据犯错的那一页**上起作用，其余两页逐条不变。
+    ///
+    /// 只认**最外侧**那一团：中间被空白夹住的短行（表格单元、行内小注）不动。
+    /// 上下两栏共用一个 x 区间是常事，中间那些孤立的团不是页边残字。
+    ///
+    /// **要删的条数达到这一侧的一半就整个放弃**这条硬闸门保留：删掉正文比漏掉几个
+    /// 残字严重得多，宁可漏杀。
     static func pageEdge(in side: [TextLine]) -> [TextLine] {
         guard side.count > 2 else { return [] }
-        guard let left = Metrics.median(side.map(\.minX)),
-              let right = Metrics.median(side.map(\.maxX)) else { return [] }
-        let dropped = side.filter {
-            ($0.maxX < left && $0.minX < left) || ($0.minX > right && $0.maxX > right)
+
+        let groups = horizontalBlocks(in: side)
+        guard groups.count > 1, let largest = groups.max(by: { $0.count < $1.count }) else { return [] }
+
+        // 最左那一行所在的团、最右那一行所在的团。两者可能是同一团（只有一团时上面
+        // 已经返回了），`formUnion` 天然去重。
+        var edge: Set<Int> = []
+        for group in groups where group.count < largest.count {
+            let leftmost = group.contains(side.indices.min { side[$0].minX < side[$1].minX }!)
+            let rightmost = group.contains(side.indices.max { side[$0].maxX < side[$1].maxX }!)
+            guard leftmost || rightmost else { continue }
+            edge.formUnion(group)
         }
-        guard dropped.count * 2 < side.count else { return [] }
-        return dropped
+
+        guard edge.count * 2 < side.count else { return [] }
+        return edge.sorted().map { side[$0] }
+    }
+
+    /// 把一组行按**横向相接关系**连成几团。
+    ///
+    /// 两行的横向区间只要隔着的空白小于 `fragmentGapFraction` 就算接上——同一个
+    /// 判据在 `continues` 里用来判「这一块碎片是不是接着上一块的末尾」，含义一致：
+    /// **小于这个空白的两块横向是连着的，大于它才是分家的**。
+    ///
+    /// 用 `top`/`height` 判纵向行距也行不通：那一侧本来就可能是上下两栏共用
+    /// 一个 x 区间（就是本文档要修的那个情形），纵向判据会把本该分开的团连起来。
+    private static func horizontalBlocks(in side: [TextLine]) -> [[Int]] {
+        var parent = Array(side.indices)
+        func root(_ index: Int) -> Int {
+            var index = index
+            while parent[index] != index { parent[index] = parent[parent[index]]; index = parent[index] }
+            return index
+        }
+        for i in side.indices {
+            for j in side.indices where j > i {
+                let blank = max(side[i].minX, side[j].minX) - min(side[i].maxX, side[j].maxX)
+                if blank < fragmentGapFraction {
+                    let (a, b) = (root(i), root(j))
+                    if a != b { parent[a] = b }
+                }
+            }
+        }
+        var groups: [Int: [Int]] = [:]
+        for i in side.indices { groups[root(i), default: []].append(i) }
+        return Array(groups.values)
     }
 
     // MARK: - 分块（分栏 + 通栏行）
@@ -396,7 +451,7 @@ enum TextLayout {
     /// 候选空档。有行跨过某条缝时，那条缝**依然是一个区间**，只是「跨越行数」不为零
     /// ——这两个量随后一起用来排名。
     ///
-    /// 两道筛子依次筛：
+    /// 三道筛子依次筛：
     ///
     /// 1. **在页内**（左右两侧的留白不是栏缝）、**跨越它的行不能太多**
     ///    （`columnCrossingFraction`）——跨过栏缝的那几行是通栏行，一两条正常，
@@ -404,6 +459,9 @@ enum TextLayout {
     /// 2. **两侧都要真的成栏**（`columnBalanceFraction`）。没有这一条，一栏里参差的
     ///    右边界会造出假空档（某行比别的行短一截），而那种空档两侧是「一行 vs 其余
     ///    所有行」，不是两栏。
+    /// 3. **跨缝的行不能比少的那一侧还多**。第 1 条拿 `crossings` 和**全页行数**比，
+    ///    那是个全页尺度的问题；这一条把它拉回**这条缝自己**的尺度。单栏页上第 1 条
+    ///    必然放行（只有一栏可跨），只有这一条挡得住——详见下面 `divided` 处的实测。
     ///
     /// **宽度只排名，不设下限。** 这里原先还有一条绝对下限（`gutterMinimumWidth`，
     /// 页宽的 2%），它是在合成图上定的，而真机照片上的真栏缝**窄得多**：一张两栏教材
@@ -448,6 +506,35 @@ enum TextLayout {
             let right = lines.filter { $0.minX >= end }.count
             let balance = min(left, right)
             guard Double(balance) >= balanceFloor else { continue }
+
+            // 3. **跨越它的行，不能比它少的那一侧还多**。
+            //
+            //    前两道筛子都把 `crossings` 拿去和**全页行数**比（预算 25%），
+            //    这在单栏页上答非所问：单栏页上任何一条空档都在横切那一栏，
+            //    而「跨越它的行」就是这一栏的几乎全部行，于是这个数只反映
+            //    「这条缝切在页面中间还是边上」，从不反映「它到底分没分开东西」。
+            //    IMG_0004 那张单栏英文页上，排名第一的假缝 0.713–0.750 跨缝 18 行、
+            //    少侧 17 行——**跨越的行比两侧任何一侧都多**，它分不出两堆来；
+            //    而同一页上真正的页边缝（0.909–0.944，正文与手写旁注之间）
+            //    跨缝 0 行。真栏缝的同一比值：IMG_0002 是 5/28 = 0.18，
+            //    IMG_0003 是 7/25 = 0.28——中间空着 2.7 倍。这一条在 IMG_0004 上
+            //    挡掉 22 条候选里的 7 条，其余两条照片上一条都没挡。
+            //
+            //    写成 `crossings < balance` 而不是再配一个比例系数：这句话本身
+            //    就是判据的字面意思——「跨过这条缝的行比某一侧全部的行还多，
+            //    那它不是缝，是一把横切整块的刀」。上限只有 1.0 这一个自然值。
+            //
+            //    **诚实记一笔：这三张照片上它不改变最终输出。** 因为同一轮把
+            //    `pageEdge` 换成了结构判据，IMG_0004 那一页的 `pageBody` 现在
+            //    一条都不删，缝选哪条都走到同一个「整页不动」上去——开/关这条
+            //    筛子，三张照片的段落**逐字相同**。留它是当**防线**：缝选错的
+            //    代价不止落在 `pageBody`，还落在 `blocks` 的递归切分与阅读顺序上
+            //    （用户报过的「左右跳」就是这一类），而这三张恰好都不敏感。
+            //    它是**定义**上的一票否决（跨缝比某一侧还多就不是缝），
+            //    不是又一个照着某张图标定的比例，所以留着不违文件头那条纪律；
+            //    若将来发现它碍事，删掉这三行即可，没有别处依赖它。
+            let divided = Double(crossings) < Double(balance)
+            guard divided else { continue }
 
             candidates.append((start, end, width, crossings, balance))
         }
