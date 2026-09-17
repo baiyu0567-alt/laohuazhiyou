@@ -38,12 +38,14 @@ struct TextLine: Equatable {
 /// 两栏**恰好等高**时兜底是对的，但真实照片上左右两栏的行未必落在同一个 y 上，
 /// 差一点就会**逐行交错**——左栏第一行、右栏第一行、左栏第二行……读出来是词串。
 ///
-/// ## 它做的三件事
+/// ## 它做的四件事
 ///
-/// 1. **分块**（`blocks`）：先认出竖排的栏，把横跨栏缝的**通栏行**（居中的大标题）
-///    单独摘出来，再给各块排阅读顺序。
-/// 2. **排序**（`readingOrder`）：栏内自上而下。
-/// 3. **成段**（`paragraphs`）：把同一段折出来的若干行接成一句，段与段之间断开。
+/// 1. **剔页边**（`pageBody`）：对开页的照片会把**邻页**边缘的一列字带进来，先整页剔掉。
+///    排在最前，因为它的判据是**整页**的统计量，越往下切越不成立。
+/// 2. **分块**（`blocks`）：先按横跨栏缝的**通栏行**把页面切成上下**区带**，再在每个
+///    区带里认出竖排的栏，最后给各块排阅读顺序。得到的是「标题 → 左栏 → 右栏」。
+/// 3. **排序**（`readingOrder`）：栏内自上而下。
+/// 4. **成段**（`paragraphsInBlock`）：把同一段折出来的若干行接成一句，段与段之间断开。
 ///
 /// ## 阈值全部是**相对的**
 ///
@@ -63,16 +65,74 @@ enum TextLayout {
     // MARK: - 入口
 
     /// 视觉行 → 段落。这是这一层的唯一出口。
+    ///
+    /// 三步依次是：**剔页边**（`pageBody`）→ **分块**（`blocks`）→ **成段**
+    /// （`paragraphsInBlock`）。
+    ///
+    /// 页边剔除排在最先，因为它是**整页**的判断，用的是整页的统计量；一旦进了
+    /// `blocks` 的递归，手上只剩一小撮行，那时算出来的「正文边缘」已经不是同一个意思了。
     static func paragraphs(from lines: [TextLine]) -> [String] {
-        blocks(in: lines).flatMap(paragraphsInBlock)
+        blocks(in: pageBody(in: lines)).flatMap(paragraphsInBlock)
+    }
+
+    // MARK: - 页边剔除
+
+    /// 去掉**别页渗进来**的页边残字。整页级的前置一步，只在出口处做一次。
+    ///
+    /// 拍书时对开页的邻页总会露出一条边，Vision 把那条边上的一列字照单全收。真机那张
+    /// 照片的左边缘竖着一列「小 只 所 精 小」，而本页正文从 x=8% 起，它们在 0–2%。
+    /// 它们**不是一栏**——五个字的「一栏」当然不是栏——分栏判据因此正确地放过了它们，
+    /// 于是它们留在了左栏块里，成了正文的一部分：生成的文字里凭空多出五个字，前后
+    /// 还各断出一段。用户看到的就是第 4、5、6、8、10 段那五个没用的单字。
+    ///
+    /// **为什么是页级前置，而不是塞进 `blocks` 的递归**：判据要的是「这一侧的中位
+    /// 左右边界」，也就是**这一侧整体**的统计量。放进递归就会在每个区带、每条子栏上
+    /// 再算一遍，越切越小，最后拿一小撮行去定「正文边缘」，那已经不是同一个问题了。
+    static func pageBody(in lines: [TextLine]) -> [TextLine] {
+        guard let gutter = verticalGutters(in: lines).first else { return lines }
+        let sides = [lines.filter { $0.maxX <= gutter.start },
+                     lines.filter { $0.minX >= gutter.end }]
+        let dropped = sides.flatMap { side -> [TextLine] in
+            // 只对**单栏**的一侧动手。那一侧要是自己还能切出栏来，说明它不是一条正文
+            // 栏（可能是另一组并排的栏），「中位数 = 正文边缘」这句话就不成立了。
+            guard verticalGutters(in: side).isEmpty else { return [] }
+            return pageEdge(in: side)
+        }
+        guard !dropped.isEmpty else { return lines }
+        return lines.filter { !dropped.contains($0) }
+    }
+
+    /// 一侧（单栏）里的页边残字：整行落在该侧**中位左边界**的左边，或中位右边界的右边。
+    ///
+    /// 判据取这一侧自己的中位数，**没有绝对坐标**：页面大小、栏宽、字号都不必知道，
+    /// 与文件头那条「阈值全部是相对的」一致。
+    ///
+    /// 两头都要**整行在外面**（`maxX < 左中位` **且** `minX < 左中位`）：只要有一端
+    /// 伸进了正文区，那它就不是「贴在边上的一列残字」，判据就朝安全的那边倒——宁可漏杀。
+    ///
+    /// **要删的条数达到这一侧的一半就整个放弃。** 中位数会被残字自己带偏：残字一多，
+    /// 「中位左边界」就落到残字中间去，判据不再代表正文边缘。删掉正文比漏掉几个残字
+    /// 严重得多，所以这条闸门是硬的。
+    static func pageEdge(in side: [TextLine]) -> [TextLine] {
+        guard side.count > 2 else { return [] }
+        guard let left = Metrics.median(side.map(\.minX)),
+              let right = Metrics.median(side.map(\.maxX)) else { return [] }
+        let dropped = side.filter {
+            ($0.maxX < left && $0.minX < left) || ($0.minX > right && $0.maxX > right)
+        }
+        guard dropped.count * 2 < side.count else { return [] }
+        return dropped
     }
 
     // MARK: - 分块（分栏 + 通栏行）
 
     /// 把一页切成若干**阅读单元**并给出阅读顺序。单元随后各自成段。
     ///
-    /// 单元有两类：**栏**（竖着一条，里面若干行）与**通栏行**（横跨栏缝的行，通常
-    /// 是居中的大标题，自成一块，不并入任何一栏）。
+    /// 单元有两类：**栏**（竖着一条，里面若干行）与**通栏行**（横跨栏缝的行）。
+    /// 通栏行又是**区带分隔**：页面先被它们横切成上下几段，每段各自再分栏，
+    /// 所以单元的顺序是「区带 0 的块 → 第 0 条通栏行 → 区带 1 的块 → …」，
+    /// 一条通栏行**排在它下面那一带的前面**。真实教材页上就是
+    /// 「写作角度1：…」→ 左栏 → 右栏 →「写作角度2：…」→ 左栏 → 右栏。
     ///
     /// 递归切分，所以三栏、四栏也走得通。块数上限 `columnLimit` 是防病态输入用的：
     /// 一页被切得太碎，说明这页根本不是分栏版式，那时保序比强行分栏安全。
@@ -85,7 +145,9 @@ enum TextLayout {
 
         let left = lines.filter { $0.maxX <= gutter.start }
         let right = lines.filter { $0.minX >= gutter.end }
-        let spanning = lines.filter { $0.maxX > gutter.start && $0.minX < gutter.end }
+        let spanningIndices = lines.indices.filter {
+            lines[$0].maxX > gutter.start && lines[$0].minX < gutter.end
+        }
 
         let leftBlocks = blocks(in: left)
         let rightBlocks = blocks(in: right)
@@ -93,18 +155,143 @@ enum TextLayout {
             return [readingOrder(lines)]
         }
 
-        // 通栏行各自成块。**不并入任何一栏**：一条横跨两栏的标题和它下面的正文
-        // 不是同一段，硬塞进某一栏就会在那一栏里插进一句无关的话。
-        let spanningBlocks = spanning.sorted { $0.top < $1.top }.map { [$0] }
-        return (leftBlocks + rightBlocks + spanningBlocks).sorted(by: blockOrder)
+        // 没有通栏行：就是普通的并排两栏，交给 `orderBlocks` 排前后。
+        guard !spanningIndices.isEmpty else {
+            return orderBlocks(leftBlocks + rightBlocks)
+        }
+
+        // **通栏行是区带分隔，不是「插在两栏之间的一块」。**
+        //
+        // 一页里出现横跨栏缝的行，通常意味着版面被它切成了**上下两个区带**，每个区带
+        // 各自还要分栏——真实教材页上就是「写作角度1：…」把页面横切成两段，每段里
+        // 各有左右两栏。旧写法只把通栏行当成一块，两栏于是**各横跨整个页面**：左栏
+        // 把两个区带的左栏连成一块、右栏同理，而标题被排到了它管的正文**后面**
+        // （`blockOrder` 先比上边缘，左栏的 −0.000 小于标题的 0.121，两者上边缘还相等）。
+        // 用户报回来的「应该是先段落，然后左右」说的就是这件事。
+        //
+        // 所以先按通栏行的上边缘把页面横切成区带，再在每个区带里分栏。区带内没有通栏行，
+        // 走上面那一支，与旧行为完全一致。
+        let separators = spanningIndices.map { lines[$0] }.sorted { $0.top < $1.top }
+        let separatorIndices = Set(spanningIndices)
+
+        var bands: [[TextLine]] = Array(repeating: [], count: separators.count + 1)
+        for index in lines.indices where !separatorIndices.contains(index) {
+            var band = 0
+            // 区带 k 是「上边缘 ≥ 第 k−1 条通栏行、且 < 第 k 条」的那些行。**先比上边缘**，
+            // 因为版面本身就是自上而下的：一条通栏行切在哪儿，由它的上边缘决定，不由
+            // 它的高度（斜页上会被撑高）或中点决定。
+            for (position, separator) in separators.enumerated()
+            where lines[index].top >= separator.top {
+                band = position + 1
+            }
+            bands[band].append(lines[index])
+        }
+
+        // **中间没有正文的连续通栏行攒成一块**，交给 `paragraphsInBlock` 去判它们之间
+        // 该不该断段。
+        //
+        // 道理是：一条通栏行有时候是标题，有时候只是**一段正文里写满整页宽的那一行**
+        // ——首行缩进之后的第一行常常就跨过了栏缝。后者与紧跟着它的那条通栏行本来就是
+        // 同一段：真机那张照片上「你觉得……你又如何看待」与「流派对……谈谈你的看法。」
+        // 是一句话折出来的两行，各自成块就把这句话拆成了两段。攒成一块之后，
+        // `startsNewParagraph` 的缩短行判据正好分得开它们——标题是短行、下一行回到
+        // 左边界；正文的续行则两头都齐。**这里只做分组，断不断的判断留给那一处**，
+        // 免得同一个决定有两个地方各说各话。
+        var result: [[TextLine]] = blocks(in: bands[0])
+        var run: [TextLine] = []
+        for (position, separator) in separators.enumerated() {
+            // 与上一条通栏行**接着同一个文字流**才并进这一组，否则它起的是新的一组。
+            if let previous = run.last, !sameTextFlow(previous, separator) {
+                result.append(run)
+                run = []
+            }
+            run.append(separator)
+            let band = bands[position + 1]
+            guard !band.isEmpty else { continue }
+            result.append(run)
+            run = []
+            result += blocks(in: band)
+        }
+        if !run.isEmpty { result.append(run) }
+        return result
     }
 
-    /// 块的阅读顺序：先比上边缘，平局比左边缘。
+    /// 两条通栏行是不是**同一个文字流**里挨着的两行。
+    ///
+    /// **判据是「两个观测盒在竖直方向叠着」。** 这是斜页上唯一还分得开的那条：
+    /// 观测盒轴对齐，被页面倾斜撑高成
+    /// `[基线 + 斜率×minX, 基线 + 行高 + 斜率×maxX]`，于是同一段里相邻两行**总是叠着**
+    /// ——上一行的底边被自己右端那一段撑到了下一行上边之下。到了段边界，下一行整整多出
+    /// 一个段间距，就叠不上了。
+    ///
+    /// 真机那张照片上的三个数（这里就是判据要分的那三对）：
+    ///
+    /// - 「你觉得…」bottom 0.1897 **＞**「流派对…」top 0.1127 → 叠着 → 同一段
+    /// - 「流派对…」bottom 0.1670 **＜**「写作角度1…」top 0.1720 → 没叠上 → 另起一段
+    /// - 「速写传统」bottom 0.0817 **＜**「你觉得…」top 0.0872 → 没叠上 → 自成一块
+    ///
+    /// **为什么不比 `top` 之差**：行距（`top` 之差）在真机照片上量不出来。按 `top` 排序后
+    /// 取相邻差的中位数是 0.0126，而真正的栏内行距是 0.024——同一个视觉行被 Vision 切成
+    /// 的碎片（差 0.0005）比真行距多得多，中位数落在碎片上。**没有可信的行距，
+    /// 「比行距多出多少」这条路就走不通**，剩下的就只有「叠没叠上」。
+    ///
+    /// **页面不斜时这条恒不成立**（`bottom = top + 行高` 恒小于下一行的 `top`），
+    /// 于是每条通栏行各自成块——那正是这个函数改动之前的行为。也就是说这一支只在斜页上
+    /// 生效，直页一个字都不变；直页上判段由 `Metrics.startsNewParagraph` 负责，
+    /// 而它在那里判得动，因为 `bottom` 没有被撑高。
+    static func sameTextFlow(_ upper: TextLine, _ lower: TextLine) -> Bool {
+        lower.top < upper.bottom
+    }
+
+    /// 同一层里并排的几块排阅读顺序：**先上下分行，行内再从左到右。**
+    ///
+    /// 只按上边缘比不行。斜页上左右两栏的上边缘差不等于零——真机那张照片上左栏顶
+    /// **0.2256**、右栏顶 **0.2250**，右栏比左栏高出 0.0006，于是「先比上边缘」把右栏
+    /// 排到了左栏前面。这 0.0006 不是版面的意思，是倾斜和裁切留下的噪声。用户要的是
+    /// **「先段落，然后左右」**：标题之后先读左栏，再读右栏。
+    ///
+    /// 判据：**两块在竖直方向重叠得够多就是同一行**（重叠超过较矮那块的
+    /// `rowOverlapFraction`）。并排的两栏高度相当，重叠接近百分之百；上下相邻的两块
+    /// 只重叠一点，或者干脆不重叠。行内按 `minX` 升序。
+    static func orderBlocks(_ blocks: [[TextLine]]) -> [[TextLine]] {
+        guard blocks.count > 1 else { return blocks }
+
+        func top(_ block: [TextLine]) -> Double { block.map(\.top).min() ?? 0 }
+        func bottom(_ block: [TextLine]) -> Double { block.map(\.bottom).max() ?? 0 }
+        func left(_ block: [TextLine]) -> Double { block.map(\.minX).min() ?? 0 }
+
+        var rows: [[[TextLine]]] = []
+        for block in blocks.sorted(by: blockOrder) {
+            if let row = rows.last {
+                let rowTop = row.map(top).min() ?? 0
+                let rowBottom = row.map(bottom).max() ?? 0
+                let overlap = min(rowBottom, bottom(block)) - max(rowTop, top(block))
+                let shorter = min(rowBottom - rowTop, bottom(block) - top(block))
+                if overlap > shorter * rowOverlapFraction {
+                    rows[rows.count - 1].append(block)
+                    continue
+                }
+            }
+            rows.append([block])
+        }
+        return rows.flatMap { row in
+            row.sorted { a, b in
+                if left(a) != left(b) { return left(a) < left(b) }
+                if top(a) != top(b) { return top(a) < top(b) }
+                return bottom(a) < bottom(b)
+            }
+        }
+    }
+
+    /// 排块序时的第一把钥匙：先比上边缘，平局比左边缘。
     ///
     /// **比较器必须是全序，不能只写上边缘。** 真实两栏页面上左右两栏的上边缘
     /// 几乎总是相等（并排起头），这时 `sorted(by:)` 不保证稳定，两栏顺序就会随运行
     /// 而变——`ordercheck` 存在的全部理由就是不让人踩这一脚，这里不能再踩一次。
     /// 左边缘各不相等，所以拿它破平局就够了。
+    ///
+    /// 它**只**用来把块排成一个初步的上下次序，给 `orderBlocks` 分行当输入；
+    /// 并排两栏谁在前由 `orderBlocks` 的行内排序说了算，不由这里。
     static func blockOrder(_ a: [TextLine], _ b: [TextLine]) -> Bool {
         let topA = a.map(\.top).min() ?? 0
         let topB = b.map(\.top).min() ?? 0
@@ -414,6 +601,13 @@ enum TextLayout {
 
     /// 一页最多认几栏。切过头说明这页不是分栏版式，那时保序比强行分栏安全。
     static let columnLimit = 4
+
+    /// 两块竖直方向重叠超过**较矮那一块**的这个比例，就算并排的同一行。
+    ///
+    /// 并排两栏高度相当，重叠接近 100%；上下相邻的两块只重叠一点或干脆不重叠。
+    /// 取 0.5 是两者之间：真机那张照片上区带里左右两栏几乎等高，比例接近 1.0，
+    /// 而上下两块（比如标题与它下面的正文）重叠通常为 0。
+    static let rowOverlapFraction = 0.5
 
     /// 段间距要比正常行距**再多出「行高的这么多倍」**，才算段落断开。
     ///
