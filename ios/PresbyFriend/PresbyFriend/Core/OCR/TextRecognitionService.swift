@@ -124,20 +124,26 @@ final class TextRecognitionService {
     /// 按纵向位置排序（画面上方到下方），恢复阅读顺序。
     ///
     /// 比较器必须是全序：`sorted(by:)` 不保证稳定，同一行内被 Vision 拆开的块
-    /// （字号混排、表格、带上标的标题）若 `origin.y` 相等，顺序会逐次运行而变。
-    /// 所以 y 相等时再按 `minX` 升序（左栏在前）打破平局。
+    /// （字号混排、表格、带上标的标题）若纵向位置相等，顺序会逐次运行而变。
+    /// 所以位置相等时再按 `minX` 升序（左栏在前）打破平局。
     ///
-    /// **这个顺序是「一栏之内」的正确顺序，不是「整页」的。** 它是按基线
-    /// （`origin.y`）比的，跨栏用它就会逐行交错（真实照片上左右两栏的行不落在同一个 y 上）。
-    /// 整页的阅读顺序要先把栏切开再排，那一步在 `TextLayout.columns` + `readingOrder`
-    /// 里做——本函数**保持原样不动**，因为它是栏内的正确解，且 `ShareView` 与
-    /// `RecognitionLanguageAudit` 都在用它，而它们不需要分栏。
+    /// **主序比的是观测盒的竖直中点（`midY`），不是基线（`origin.y`）。**
+    /// 页面倾斜时轴对齐的观测盒会被撑高（`盒高 = 真行高 + |斜率| × 盒宽`），
+    /// 基线于是带着碎片**右端**的横向位置，宽碎片和窄碎片之间不可比——真机上
+    /// 会把一行靠左的窄碎片排到它上面那一行靠右的宽碎片之前。
+    /// 中点把宽度项减掉，宽窄碎片回到同一个尺度。完整推导见
+    /// `TextLayout.readingOrder`：**两处的键是同一条，改一处就得改另一处。**
+    ///
+    /// **这个顺序是「一栏之内」的正确顺序，不是「整页」的。** 跨栏用它就会逐行交错
+    /// （真实照片上左右两栏的行不落在同一个 y 上）。整页的阅读顺序要先把栏切开再排，
+    /// 那一步在 `TextLayout.blocks` + `readingOrder` 里做——本函数**不做分栏**，
+    /// 因为 `ShareView` 与 `RecognitionLanguageAudit` 都在用它，而它们不需要分栏。
     static func blocks(from observations: [VNRecognizedTextObservation]) -> [RecognizedBlock] {
         observations
             .sorted { a, b in
-                if a.boundingBox.origin.y != b.boundingBox.origin.y {
-                    return a.boundingBox.origin.y > b.boundingBox.origin.y
-                }
+                let centerA = a.boundingBox.midY
+                let centerB = b.boundingBox.midY
+                if centerA != centerB { return centerA > centerB }
                 return a.boundingBox.minX < b.boundingBox.minX
             }
             .compactMap { obs in

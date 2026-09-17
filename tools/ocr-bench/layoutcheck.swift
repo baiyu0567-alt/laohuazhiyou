@@ -101,6 +101,42 @@ let mixedSizes = [line("小", x: 0.10, top: 0.10, width: 0.10),
 expect(TextLayout.readingOrder(mixedSizes).map(\.text), ["小", "大"],
        "同一行字大小不一 → 按基线排（上边缘会跟着字号跑偏）")
 
+// **页面倾斜时观测盒被撑高** —— 这一条钉的是真机上报回来的反序。
+//
+// 页面是斜的时，Vision 给的**轴对齐**盒要同时圈住这一行在左端和右端的高度，于是
+// `盒高 = 真行高 + |斜率| × 盒宽`：宽碎片被撑高，窄碎片不会。基线
+// `bottom = 行基线 + 行高 + 斜率 × maxX` 因此带着**右端**的横向位置，
+// 宽窄碎片之间不可比 —— 一行靠左的窄碎片会排到它**上面**那一行靠右的宽碎片之前。
+//
+// 下面三组几何**是从用户的真照片上抄下来的**（文字用的是订正后的原文，
+// 只几何照抄），所以它复现的就是现场：真机上「时习之’」确实跑到了
+// 「戏的梅兰芳说…」前面，用户报的就是这个。
+let tiltWide = "戏的梅兰芳说：“这是我的法帖，必须‘学而"
+let tiltTail = "时习之’"
+let tiltRest = "，但到台上，我却不能完全照他这"
+let tiltedFragments = [
+    line(tiltWide, x: 0.536, top: 0.2250, width: 0.313, height: 0.0689),
+    line(tiltTail, x: 0.541, top: 0.2631, width: 0.071, height: 0.0160),
+    line(tiltRest, x: 0.608, top: 0.2581, width: 0.244, height: 0.0578),
+]
+expect(TextLayout.readingOrder(tiltedFragments).map(\.text), [tiltWide, tiltTail, tiltRest],
+       "倾斜页：窄碎片不得越过上一行的宽碎片")
+
+// **反证：这条夹具必须能区分两种主序。** 否则它只是碰巧通过，什么都没钉住 ——
+// 上一段的断言在改主序之前也是红的才对。这里把「按基线排」的结果也钉下来，
+// 于是将来若有人把主序改回 `bottom`，这两条会一起变红，而不是悄悄通过。
+expect(tiltedFragments.sorted { $0.bottom < $1.bottom }.map(\.text), [tiltTail, tiltWide, tiltRest],
+       "反证：按基线排确实得到错误顺序（说明上面的夹具是有效的）")
+
+// 同一行的两个碎片仍按左右排。倾斜页上 `bottom` 沿行单调、中点也沿行单调，
+// 这一条确认换主序没有把**行内**顺序弄反——行内本来就对，别改坏。
+let tiltedSameRow = [
+    line(tiltRest, x: 0.608, top: 0.2581, width: 0.244, height: 0.0578),
+    line(tiltTail, x: 0.541, top: 0.2631, width: 0.071, height: 0.0160),
+]
+expect(TextLayout.readingOrder(tiltedSameRow).map(\.text), [tiltTail, tiltRest],
+       "倾斜页：同一行的碎片仍按 minX 升序")
+
 // MARK: - 成段
 
 print("\n【成段】")
