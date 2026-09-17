@@ -23,11 +23,13 @@
 "no_shared_content" = "Nessun contenuto condiviso trovato";
 "no_text_found" = "Nessun testo trovato su questa schermata";
 "ocr_fail" = "Impossibile leggere il testo in questa immagine";
+"ocr_hint_language_title" = "Lingua di riconoscimento forse sbagliata";
+"ocr_hint_language_body" = "Riconosciuto come %1$@, ma la lingua di sistema è %2$@. Se il testo non è in %1$@, cambia la lingua di riconoscimento nelle Impostazioni.";
 "ocr_language" = "Lingua di riconoscimento";
-"ocr_language_chinese" = "Cinese";
-"ocr_language_desc" = "Scegli la lingua del testo che fotografi. Scegliere quella sbagliata fa fallire il riconoscimento in silenzio.";
-"ocr_language_english" = "Inglese";
-"ocr_language_system" = "Come il sistema";
+"ocr_language_current" = "In uso attualmente";
+"ocr_language_desc" = "Scegli la lingua del testo che fotografi, non quella dell'interfaccia. Scegliere quella sbagliata fa fallire il riconoscimento in silenzio.";
+"ocr_language_follow_system" = "Come il sistema";
+"ocr_language_warning" = "Non corrisponde alla lingua di sistema. Se il testo non viene riconosciuto bene, cambiala qui.";
 "ocr_no_text" = "Nessun testo trovato in questa immagine. Viene mostrato l'originale — pizzica per ingrandire.";
 "ocr_preparing" = "Preparazione del riconoscimento del testo…";
 "paste_and_magnify" = "Incolla e ingrandisci";
@@ -57,7 +59,6 @@
 "show_controls" = "Mostra controlli";
 "shutter" = "Scatta";
 "stop_reading" = "Ferma";
-"tap_text_to_read" = "Tocca il testo per leggere";
 "theme_dark" = "Scuro";
 "theme_label" = "Tema";
 "theme_sepia" = "Seppia";

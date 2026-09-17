@@ -7,6 +7,15 @@ enum ReaderContent {
     case image(OCRImageSource)
 }
 
+/// 「识别语言可能选错了」这条提示的内容。两个码都交给 UI 去取名，
+/// 这里不碰 `L10n`——文案属于视图层。
+struct LanguageHint: Equatable {
+    /// 这次实际用的识别语言码。
+    let usedCode: String
+    /// 设备语言解析出来的那一档。
+    let systemCode: String
+}
+
 /// 承载「某段内容 → 打开阅读模式」这一个动作，三个入口共用。
 @MainActor
 final class ReaderLaunchCoordinator: ObservableObject {
@@ -27,7 +36,15 @@ final class ReaderLaunchCoordinator: ObservableObject {
     /// / `isPresenting` 保持同一种风格。
     @Published var recognitionFailed = false
 
+    /// 识别语言可能不对。nil = 不显示。判定见 `hint(for:failed:)`。
+    @Published var languageHint: LanguageHint?
+
     private let ocr = TextRecognitionService()
+
+    /// 这次 OCR 实际用的语言码（`updateLanguages` 里从数组首项取）。
+    private var usedLanguageCode = "en-US"
+    /// 设备语言解析出来的那一档。两者不同才可能出提示。
+    private var systemLanguageCode = "en-US"
 
     /// 每次发起或取消都自增。OCR 完成时对不上就说明这次结果已经过期。
     ///
@@ -37,8 +54,13 @@ final class ReaderLaunchCoordinator: ObservableObject {
     private var generation = 0
 
     /// 语言数组的构造在 `RecognitionLanguage` 里，这里只是转发给 OCR 服务。
-    func updateLanguages(_ languages: [String]) {
+    ///
+    /// 同时记下「设备语言是哪一档」，供 `hint(for:failed:)` 判断不一致——
+    /// 两者必须来自同一个 `RecognitionLanguage.systemLanguageCode` 调用，不能各算各的。
+    func updateLanguages(_ languages: [String], systemCode: String) {
         ocr.languages = languages
+        usedLanguageCode = languages.first ?? "en-US"
+        systemLanguageCode = systemCode
     }
 
     /// 启动时后台预热识别模型，避免用户第一次按快门要等很久。
@@ -57,6 +79,8 @@ final class ReaderLaunchCoordinator: ObservableObject {
         isPreparing = false
         // 文本路径没有识别动作，失败标志必须归零，否则会继承上一次 OCR 的状态。
         recognitionFailed = false
+        // 同上：这条路径没有识别动作，也就无从谈起「识别语言可能不对」。
+        languageHint = nil
         fallbackImage = nil
         self.text = trimmed
         isPresenting = true
@@ -77,6 +101,7 @@ final class ReaderLaunchCoordinator: ObservableObject {
         // 点不到它们。但没有任何东西在保证这一点。
         text = nil
         fallbackImage = nil
+        languageHint = nil
 
         isPreparing = true
         recognitionFailed = false
@@ -99,6 +124,7 @@ final class ReaderLaunchCoordinator: ObservableObject {
         guard token == generation else { return }
 
         recognitionFailed = failed
+        languageHint = hint(for: blocks, failed: failed)
         if !failed, !joined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             text = joined
             fallbackImage = nil
@@ -111,12 +137,66 @@ final class ReaderLaunchCoordinator: ObservableObject {
         isPresenting = true
     }
 
+    /// 「识别语言可能选错了」要不要提示。**两个条件同时成立**才给：
+    ///
+    /// 1. 这次实际用的识别语言 ≠ 设备语言解析出来的那一档；
+    /// 2. 这次的结果确实弱——一个字都没认出来，**或**整批置信度都低。
+    ///
+    /// 为什么非要第 2 条：手动选一门外语是**故意的**。一个在德语设备上拍中文药盒的人，
+    /// 正是主动去选了中文——少了第 2 条，他每次识别成功都会被念一句「可能识别不佳」，
+    /// 而他做对了。提示要给的是「认不出来」这个事实，不是「不一致」这个状态。
+    ///
+    /// 引擎抛错时也不提示：那是 Vision 自己失败了，跟语言选得对不对无关，
+    /// 兜底文案已经在说这件事。
+    private func hint(for blocks: [RecognizedBlock], failed: Bool) -> LanguageHint? {
+        guard !failed, usedLanguageCode != systemLanguageCode else { return nil }
+        guard Self.looksWeak(blocks) else { return nil }
+        return LanguageHint(usedCode: usedLanguageCode, systemCode: systemLanguageCode)
+    }
+
+    /// 这次识别是不是整体不可信。
+    ///
+    /// 阈值是**实测标定**的，样本是 `tools/ocr-bench` 的两张合成图 × 3 种语言：
+    ///
+    /// | 配置 | 块数 | 平均置信度 | 低置信度占比 |
+    /// |---|---|---|---|
+    /// | `zh-Hans` ✅ | 10 | 0.640 | 30% |
+    /// | `zh-Hans` ✅（两栏图） | 2 | **0.400** | **50%** |
+    /// | `en-US` ❌ | 4 | 0.300 | 100% |
+    /// | `ja-JP` ❌ | 10 | 0.320 | 90% |
+    ///
+    /// **单看平均置信度分不开**：识别正确的两栏图低到 0.400，识别错误的 ja-JP 高到 0.320，
+    /// 只差 0.08，那是噪声级的差距。两个条件取「且」才把六个样本全部分对——
+    /// 正例靠占比那一半挡住，反例两条都满足。
+    ///
+    /// **误报与漏报的代价不对称**：误报是当着一个做对了的用户的面说他可能错了，
+    /// 漏报只是少显示一句提示。所以这里宁漏不误，宁可把阈值定紧。
+    ///
+    /// ⚠️ 样本只有两张**合成图**，而 `tools/ocr-bench/README.md`「局限」一节写明合成图
+    /// 不含真实照片的透视畸变、光照不均、反光，且合成图上正确识别本身就只有 0.400。
+    /// 真机上拿真实药盒照片复验过再定这两个阈值。
+    private static func looksWeak(_ blocks: [RecognizedBlock]) -> Bool {
+        guard !blocks.isEmpty else { return true }
+        let confidences = blocks.map(\.confidence)
+        let count = Float(confidences.count)
+        let mean = confidences.reduce(0, +) / count
+        let lowFraction = Float(confidences.filter { $0 < lowConfidence }.count) / count
+        return mean < weakMeanConfidence && lowFraction > weakLowFraction
+    }
+
+    /// 单个块低于它算「低置信度」。
+    private static let lowConfidence: Float = 0.5
+    /// 整批平均低于它、且低置信度块占比高于 `weakLowFraction`，才判为弱。
+    private static let weakMeanConfidence: Float = 0.5
+    private static let weakLowFraction: Float = 0.8
+
     func close() {
         // 作废在途的 OCR，并收掉它的转圈——否则被取消的那次会把「正在准备」留在屏幕上。
         generation += 1
         isPresenting = false
         isPreparing = false
         recognitionFailed = false
+        languageHint = nil
         text = nil
         fallbackImage = nil
     }

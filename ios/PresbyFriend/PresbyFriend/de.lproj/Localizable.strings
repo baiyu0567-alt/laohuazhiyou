@@ -23,11 +23,13 @@
 "no_shared_content" = "Kein geteilter Inhalt gefunden";
 "no_text_found" = "Kein Text auf diesem Bildschirm gefunden";
 "ocr_fail" = "Der Text in diesem Bild konnte nicht gelesen werden";
+"ocr_hint_language_title" = "Möglicherweise falsche Erkennungssprache";
+"ocr_hint_language_body" = "Erkannt als %1$@, Ihre Systemsprache ist aber %2$@. Wenn der Text nicht %1$@ ist, ändern Sie die Erkennungssprache in den Einstellungen.";
 "ocr_language" = "Erkennungssprache";
-"ocr_language_chinese" = "Chinesisch";
-"ocr_language_desc" = "Wählen Sie die Sprache des fotografierten Textes. Die falsche Wahl lässt die Erkennung unbemerkt fehlschlagen.";
-"ocr_language_english" = "Englisch";
-"ocr_language_system" = "Wie System";
+"ocr_language_current" = "Aktuell verwendet";
+"ocr_language_desc" = "Wählen Sie die Sprache des fotografierten Textes, nicht die der Oberfläche. Die falsche Wahl lässt die Erkennung unbemerkt fehlschlagen.";
+"ocr_language_follow_system" = "Wie das System";
+"ocr_language_warning" = "Das entspricht nicht Ihrer Systemsprache. Wenn Text schlecht erkannt wird, ändern Sie es hier.";
 "ocr_no_text" = "Kein Text im Bild gefunden. Das Original wird angezeigt — zum Zoomen aufziehen.";
 "ocr_preparing" = "Texterkennung wird vorbereitet…";
 "paste_and_magnify" = "Einfügen & vergrößern";
@@ -57,7 +59,6 @@
 "show_controls" = "Steuerung anzeigen";
 "shutter" = "Aufnehmen";
 "stop_reading" = "Stopp";
-"tap_text_to_read" = "Text zum Lesen antippen";
 "theme_dark" = "Dunkel";
 "theme_label" = "Thema";
 "theme_sepia" = "Sepia";

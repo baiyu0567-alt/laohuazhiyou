@@ -23,11 +23,13 @@
 "no_shared_content" = "No shared content found";
 "no_text_found" = "No text found on this screen";
 "ocr_fail" = "Could not read the text in this picture";
+"ocr_hint_language_title" = "Recognition language may be wrong";
+"ocr_hint_language_body" = "Recognizing as %1$@, but your system language is %2$@. If the text is not %1$@, change the recognition language in Settings.";
 "ocr_language" = "Recognition language";
-"ocr_language_chinese" = "Chinese";
-"ocr_language_desc" = "Choose the language of the text you photograph. Picking the wrong one makes recognition fail silently.";
-"ocr_language_english" = "English";
-"ocr_language_system" = "Follow system";
+"ocr_language_current" = "Currently using";
+"ocr_language_desc" = "Choose the language of the text you photograph, not the interface language. Picking the wrong one makes recognition fail silently.";
+"ocr_language_follow_system" = "Same as system";
+"ocr_language_warning" = "This is not your system language. If text is not recognized well, change it here.";
 "ocr_no_text" = "No text found in this picture. Showing the original — pinch to zoom.";
 "ocr_preparing" = "Preparing text recognition…";
 "paste_and_magnify" = "Paste & Magnify";
@@ -57,7 +59,6 @@
 "show_controls" = "Show Controls";
 "shutter" = "Capture";
 "stop_reading" = "Stop";
-"tap_text_to_read" = "Tap text to read";
 "theme_dark" = "Dark";
 "theme_label" = "Theme";
 "theme_sepia" = "Sepia";

@@ -7,11 +7,18 @@ struct ReaderView: View {
 
     let incomingText: String
     let incomingParagraphs: [String]?
+    /// 识别语言可能选错了的提示。判定在 `ReaderLaunchCoordinator.hint(for:failed:)`，
+    /// 这里只负责显示。nil = 不显示。
+    let languageHint: LanguageHint?
     let onClose: (() -> Void)?
 
-    init(text: String, paragraphs: [String]? = nil, onClose: (() -> Void)? = nil) {
+    init(text: String,
+         paragraphs: [String]? = nil,
+         languageHint: LanguageHint? = nil,
+         onClose: (() -> Void)? = nil) {
         incomingText = text
         incomingParagraphs = paragraphs
+        self.languageHint = languageHint
         self.onClose = onClose
     }
 
@@ -21,6 +28,10 @@ struct ReaderView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
+                    if let languageHint {
+                        languageHintCard(languageHint)
+                    }
+
                     if !vm.paragraphs.isEmpty {
                         ForEach(Array(vm.paragraphs.enumerated()), id: \.offset) { index, paragraph in
                             Text(paragraph)
@@ -107,6 +118,33 @@ struct ReaderView: View {
             vm.stopSpeaking()
             vm.saveToSettings(settings)
         }
+    }
+
+    // MARK: - Language Hint
+
+    /// 「识别语言可能选错了」。放在正文**最上面**：用户看到一段乱码时，第一个要能看到的
+    /// 就是「这不一定是字写得不好，可能是语言选错了」。
+    ///
+    /// 字号跟着阅读字号缩放而不是写死：这个 App 的用户就是看不清小字才来的，
+    /// 提示本身若是小字，等于把提示藏起来。但也不与正文同大，否则它看起来像正文的一部分。
+    /// 底色用 `textColor` 的淡色而不是 `.ultraThinMaterial`：阅读页有四套主题，
+    /// 材质在浅色/深色主题下观感不一致，而正文色是跟着主题走的。
+    private func languageHintCard(_ hint: LanguageHint) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L10n.ocrHintLanguageTitle)
+                .font(.system(size: max(20, vm.fontSize * 0.6), weight: .semibold))
+            Text(String(format: L10n.ocrHintLanguageBody,
+                        RecognitionLanguage.displayName(for: hint.usedCode),
+                        RecognitionLanguage.displayName(for: hint.systemCode)))
+                .font(.system(size: max(18, vm.fontSize * 0.5)))
+        }
+        .foregroundColor(vm.theme.textColor)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(vm.theme.textColor.opacity(0.12))
+        .cornerRadius(12)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 20)
     }
 
     // MARK: - Controls Panel

@@ -9,7 +9,6 @@ enum L10n {
     static var settingsTab: String { NSLocalizedString("settings_tab", comment: "") }
     static var zoomLabel: String { NSLocalizedString("zoom_label", comment: "") }
     static var flashlight: String { NSLocalizedString("flashlight", comment: "") }
-    static var tapTextToRead: String { NSLocalizedString("tap_text_to_read", comment: "") }
     static var cameraError: String { NSLocalizedString("camera_error", comment: "") }
     static var readingMode: String { NSLocalizedString("reading_mode", comment: "") }
     static var fontSize: String { NSLocalizedString("font_size", comment: "") }
@@ -70,7 +69,30 @@ enum L10n {
     static var ocrFail: String { NSLocalizedString("ocr_fail", comment: "") }
     static var ocrLanguage: String { NSLocalizedString("ocr_language", comment: "") }
     static var ocrLanguageDesc: String { NSLocalizedString("ocr_language_desc", comment: "") }
-    static var ocrLanguageSystem: String { NSLocalizedString("ocr_language_system", comment: "") }
-    static var ocrLanguageChinese: String { NSLocalizedString("ocr_language_chinese", comment: "") }
-    static var ocrLanguageEnglish: String { NSLocalizedString("ocr_language_english", comment: "") }
+
+    /// 识别语言的首项。**需要翻译的只有这一项**——它说的是「跟系统走」这件事，
+    /// 与具体是哪门语言无关。
+    ///
+    /// 其余选项名（`Deutsch`、`日本語`、`简体中文`…）**不在这里**，它们由
+    /// `RecognitionLanguage.displayName(for:)` 生成：那些是**本族名**（autonym），
+    /// 六种界面语言下刻意完全一样，因为它们指的始终是「被拍文本的语言」而不是界面语言。
+    /// 界面是德语的人要拍中文文件就该选中文，写成 `简体中文` 他才能一眼找到；
+    /// 翻成 `Chinesisch` 反而要他在**别的语言**里认出自己的语言。
+    ///
+    /// 所以它们本来就不该被翻译，也就不该进 `Localizable.strings`——放进去迟早会被
+    /// 当成漏翻而翻掉，一翻掉上面那个好处就没了。这也是它们不在这里列常量的原因：
+    /// 清单是运行时从 Vision 取的（本机 33 种），常量列不全，也没必要列。
+    static var ocrLanguageFollowSystem: String { NSLocalizedString("ocr_language_follow_system", comment: "") }
+
+    /// 「当前实际用的是哪一档」这一行的**左侧标签**（右侧的值是本族名，由
+    /// `RecognitionLanguage.displayName(for:)` 给，不进 `.strings`——理由同首项那段）。
+    /// 选了「跟随系统」之后界面上看不出解析结果，靠这一行写出来。
+    static var ocrLanguageCurrent: String { NSLocalizedString("ocr_language_current", comment: "") }
+
+    /// 设置页的 ❗ 说明，只在「实际用的 ≠ 系统语言那一档」时显示。
+    static var ocrLanguageWarning: String { NSLocalizedString("ocr_language_warning", comment: "") }
+
+    /// 阅读页的提示：「识别语言可能选错了」。标题 + 正文，正文带两个 `%@`（实际用的、系统语言）。
+    static var ocrHintLanguageTitle: String { NSLocalizedString("ocr_hint_language_title", comment: "") }
+    static var ocrHintLanguageBody: String { NSLocalizedString("ocr_hint_language_body", comment: "") }
 }

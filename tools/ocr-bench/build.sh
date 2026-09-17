@@ -35,7 +35,8 @@ ln -sf ../ordercheck.swift bin/main.swift
 xcrun --sdk iphonesimulator swiftc -O -o bin/ordercheck bin/main.swift \
     -target arm64-apple-ios16.0-simulator \
     ../../ios/PresbyFriend/PresbyFriend/Core/OCR/TextRecognitionService.swift \
-    ../../ios/PresbyFriend/PresbyFriend/Core/OCR/OCRImageSource.swift
+    ../../ios/PresbyFriend/PresbyFriend/Core/OCR/OCRImageSource.swift \
+    ../../ios/PresbyFriend/PresbyFriend/Core/OCR/RecognitionLanguage.swift
 
 printf '\n完成。产物在 bin/\n'
 

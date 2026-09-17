@@ -8,7 +8,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var letterSpacing: CGFloat = 1.0
     @Published var rulerEnabled: Bool = false
     @Published var selectedLanguage: String = "en"
-    @Published var recognitionLanguage: RecognitionLanguage = .system
+    @Published var recognitionLanguage: RecognitionLanguage = .followSystem
 
     let availableLanguages: [(code: String, name: String)] = [
         ("en", "English"),

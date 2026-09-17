@@ -30,9 +30,21 @@ struct PresbyFriendApp: App {
     @StateObject private var settings = SettingsModel()
     @StateObject private var languageManager = LanguageManager.shared
 
+    /// 「用户停在哪个 tab」。**它必须住在 `.id` 外面。**
+    ///
+    /// 下面 `ContentView` 挂着 `.id(languageManager.current)`——那道 `.id` 的用途是
+    /// 改语言后强制重建视图树（`LanguageAwareBundle` 是在查找的那一刻读
+    /// `LanguageManager.shared.current`，不重建就换不掉已算出的文案）。但 `.id` 换值的
+    /// 代价是整个 `ContentView` 连同它持有的 `@StateObject` 一起销毁重造，而 `router`
+    /// 原先正是其中之一：改一次语言，`selectedTab` 就被按回默认值 `0`，
+    /// 用户在设置页选完语言，下一帧就站在放大镜页上了。
+    ///
+    /// 提到这里之后，`router` 活在 `.id` 之外，语言重建不再动它。
+    @StateObject private var router = TabRouter()
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(router: router)
                 .environmentObject(settings)
                 .id(languageManager.current)  // Force reload on language change
                 .onAppear {
@@ -58,23 +70,30 @@ final class TabRouter: ObservableObject {
 
 struct ContentView: View {
     @EnvironmentObject var settings: SettingsModel
-    @StateObject private var router = TabRouter()
+    /// 由 `PresbyFriendApp` 持有并从外面传进来——**不在这里建**，理由是那道
+    /// `.id(languageManager.current)` 会把 `ContentView` 整个重建掉（见
+    /// `PresbyFriendApp` 里 `router` 的注释）。
+    @ObservedObject var router: TabRouter
     @StateObject private var coordinator = ReaderLaunchCoordinator()
 
     /// 识别语言偏好**已经生效**的那一个值。
     ///
     /// 用来区分两件长得一样的事：**用户在设置页改了选择**，和**冷启动时
-    /// `settings.load()` 把存下来的值读进来**——只有存储值与默认值 `.system` 不同时，
-    /// 后者的 `load()` 才构成一次真实变化，`settings.recognitionLanguage` 的
-    /// `.onChange` 也才会真触发一次（从没改过这项设置的用户，`load()` 写回的还是
-    /// `.system`，值没变，回调根本不发生）。前者需要补一次预热；后者由 `.task`
-    /// 里那次负责。不区分的话，存储值非 `.system` 的用户每次冷启动会多打一次
-    /// `prewarm()`——两份数组逐字相同（都出自 `load()` 之后的
-    /// `settings.recognitionLanguage`），而 `prewarm()` 本身没有幂等闸（见它的注释），
-    /// 这次调用落在预热还在途的窗口里，拦不住。
-    /// 代价只是第二次 `recognize` 排在串行 `queue` 上、模型已热之后那实测的 0.1–0.35s
-    /// （见 `TextRecognitionService.prewarm()` 的注释），不是再准备一遍模型：
+    /// `settings.load()` 把存储值读出来**。后者只要与默认值 `.followSystem` 不同，
+    /// `settings.recognitionLanguage` 的 `.onChange` 就会真触发一次——那是读设置，
+    /// 不是用户操作，预热归 `.task` 里那次。真正需要补一次预热的只有用户在设置页改了选择。
+    ///
+    /// 不区分的话，每次冷启动会多打一次 `prewarm()`——两份数组逐字相同（都出自
+    /// `load()` 之后的 `settings.recognitionLanguage`），而 `prewarm()` 本身没有幂等闸
+    /// （见它的注释），这次调用落在预热还在途的窗口里，拦不住。代价只是第二次
+    /// `recognize` 排在串行 `queue` 上、模型已热之后那实测的 0.1–0.35s（见
+    /// `TextRecognitionService.prewarm()` 的注释），不是再准备一遍模型：
     /// 这道闸省掉的是一次**无谓的调用**。
+    ///
+    /// 改动前这里还有第二条路（存储为空而设备语言是中文时 `initialDefault` 会预选出中文，
+    /// 与当时的默认值 `.followApp` 不同）。现在默认值本身就是「跟随系统」，那条路没有了：
+    /// 存储为空 ⇒ `load()` 得到 `.followSystem` ⇒ 与默认值相同 ⇒ 不触发。**这道闸因此
+    /// 比改动前更简单，而不是更复杂。**
     @State private var appliedRecognitionLanguage: RecognitionLanguage?
 
     /// URL 分享进来、但没能得到可读正文时，给用户一个看得见的交代。
@@ -159,7 +178,7 @@ struct ContentView: View {
             //
             // 先自己把存储的设置读进来，**不再依赖** App 层 `.onAppear` 里那次 `load()`
             // 先于本 `.task` 到达——SwiftUI 不保证这个顺序，而押在它上面的后果是冷启动
-            // 预热两遍（`.task` 热 `.system` 那组，随后的 onChange 再热存储那组，两份
+            // 预热两遍（`.task` 热默认那组，随后的 onChange 再热存储那组，两份
             // 不同的数组，`prewarm()` 没有幂等闸，两次都会真跑）。
             // `load()` 幂等且便宜（只读 UserDefaults 并给 @Published 赋值，见
             // SettingsModel.swift:20-29），`ShareView` 也已经连着调过两次，所以这里先读
@@ -178,18 +197,18 @@ struct ContentView: View {
             // 换语言必须**先于**预热：`prewarm()` 最终走到 `recognize`，读的是当时生效的
             // `languages`；顺序反了就是拿旧语言去预热，等于没热。
             applyRecognitionLanguages()
-            // 冷启动那次 `load()` **只有**在存储值与默认值 `.system` 不同时才会走到这里
-            // ——那时 `.system` → 存储值是一次真实变化，但那是读设置、不是用户操作，
-            // 预热归上面的 `.task`。从没改过这项设置的用户写回的还是 `.system`，值没变，
-            // `onChange` 压根不触发，他也同样只由 `.task` 预热一次。所以这里只对运行中的
-            // 真实变更补一次预热，且每次变更恰好一次：判的是「和已经生效的值不同」，
-            // 用户在两个选项间来回切，每一次都会预热。
+            // 冷启动那次 `load()` 读出存储值时也会走到这里（存储值与默认值 `.followSystem`
+            // 不同才会），但那是读设置、不是用户操作，预热归上面的 `.task`：`.task` 会先跑完
+            // `load()` 并把结果记进 `appliedRecognitionLanguage`，于是无论这个回调落在它
+            // 之前还是之后，下面那道闸都会挡掉（落在之前 → `applied` 还是 nil，走 nil 分支
+            // 只记录；落在之后 → 已相等）。
+            // 所以这里只对运行中的真实变更补一次预热，且每次变更恰好一次：判的是
+            // 「和已经生效的值不同」，用户在两个选项间来回切，每一次都会预热。
             if let applied = appliedRecognitionLanguage, applied != newValue {
                 coordinator.prewarm()
             }
             appliedRecognitionLanguage = newValue
         }
-        .onChange(of: settings.language) { _ in applyRecognitionLanguages() }
         .onChange(of: settings.pendingURL) { url in
             guard let url else { return }
             settings.pendingURL = nil
@@ -235,7 +254,9 @@ struct ContentView: View {
     @ViewBuilder
     private var readerContent: some View {
         if let text = coordinator.text {
-            ReaderView(text: text, paragraphs: nil, onClose: { coordinator.close() })
+            ReaderView(text: text, paragraphs: nil,
+                       languageHint: coordinator.languageHint,
+                       onClose: { coordinator.close() })
         } else if let source = coordinator.fallbackImage {
             ZStack(alignment: .top) {
                 ZoomableImageView(image: source.uiImage)
@@ -250,6 +271,14 @@ struct ContentView: View {
                         .background(.ultraThinMaterial)
                         .cornerRadius(12)
                         .padding()
+                    // 语言提示接在兜底文案下面。这条分支和提示并不互斥——恰恰相反，
+                    // 「一个字都没认出来」正是提示最该出现的场合之一（`looksWeak` 的
+                    // 第一个条件就是 0 块）。反过来，`recognitionFailed` 为真时
+                    // `languageHint` 必为 nil（见 `hint(for:failed:)`），所以这里
+                    // 不会出现「读不出来 + 可能是语言不对」叠在一起自相矛盾。
+                    if let hint = coordinator.languageHint {
+                        languageHintCard(hint)
+                    }
                     Spacer()
                 }
                 VStack {
@@ -321,19 +350,53 @@ struct ContentView: View {
         }
     }
 
-    /// 必须用 `Locale.preferredLanguages`（用户的真实语言偏好），**不能用 `Locale.current`**。
-    /// `Locale.current` 是按本 App 的本地化过滤后的结果：本 App 只出 en/de/fr/es/it/pt
-    /// （`*.lproj` + `developmentRegion = en`，且没有 `CFBundleLocalizations`），所以在
-    /// 中文系统的设备上它返回的是 `en`——`.system` 分支于是永远选不到中文，默认就拿
-    /// `["en-US"]` 去认中文：不报错、不崩溃，只是安静地输出垃圾（实测「用法用量」→ "mzms"）。
-    /// 已在 booted 模拟器的本 App 上实测：`-AppleLanguages (zh-Hans)` 启动时
-    /// `Locale.current.languageCode = en`（identifier `en_CN`，`preferredLocalizations = [en]`），
-    /// 而 `Locale.preferredLanguages[0] = "zh-Hans"`。
+    /// 识别语言可能选错了的提示——兜底原图那一支用的版本。
+    ///
+    /// 和 `ReaderView.languageHintCard` 是**两份**，不是疏忽：那一支画在阅读主题的底色上、
+    /// 用主题正文色的淡色，这一支画在照片上、必须用材质才在任意照片上都读得清。
+    /// 文案只有一份，在 `L10n` 里。
+    private func languageHintCard(_ hint: LanguageHint) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L10n.ocrHintLanguageTitle)
+                .font(.headline)
+            Text(String(format: L10n.ocrHintLanguageBody,
+                        RecognitionLanguage.displayName(for: hint.usedCode),
+                        RecognitionLanguage.displayName(for: hint.systemCode)))
+                .font(.subheadline)
+        }
+        .multilineTextAlignment(.leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(.ultraThinMaterial)
+        .cornerRadius(12)
+        .padding(.horizontal)
+    }
+
+    /// 识别语言在这里解析：读设备语言 + 用户在设置页的选择，交给
+    /// `RecognitionLanguage` 构造出 Vision 的语言数组。
+    ///
+    /// 设备语言必须读 `Locale.preferredLanguages`，**不能用 `Locale.current`**：后者
+    /// 按本 App 的本地化过滤过——本 App 只出 en/de/fr/es/it/pt（六份 `*.lproj` +
+    /// `developmentRegion = en`，且没有 `CFBundleLocalizations`），所以在**中文系统**的
+    /// 设备上它返回 `en`。已在 booted 模拟器上对本 App 实测：`-AppleLanguages (zh-Hans)`
+    /// 启动时 `Locale.current.languageCode = en`（identifier `en_CN`，
+    /// `preferredLocalizations = [en]`），而 `Locale.preferredLanguages[0] = "zh-Hans"`。
+    ///
+    /// 读的是**实时值**，不是启动时缓存的一份：跟随系统要真的跟随，就不能在别处算一次冻住。
+    /// 已知边界：系统语言在 App 运行中改变不会触发这里重算（没有任何东西在监听它），
+    /// 但 iOS 改系统语言通常会把 App 重启，那条路会重新走到这里。
     private func applyRecognitionLanguages() {
+        let deviceLanguageCode = Locale.preferredLanguages.first
+        let supported = OCRSupportedLanguageCodes.all
         coordinator.updateLanguages(
-            RecognitionLanguage.visionLanguages(
-                systemLanguageCode: Locale.preferredLanguages.first,
-                preference: settings.recognitionLanguage))
+            RecognitionLanguage.visionLanguages(deviceLanguageCode: deviceLanguageCode,
+                                                preference: settings.recognitionLanguage,
+                                                supported: supported),
+            // 同一个 `supported`、同一个设备语言码算出来的「系统语言那一档」——
+            // 阅读页据此判断「实际用的 ≠ 系统语言」，两者必须同源。
+            systemCode: RecognitionLanguage.systemLanguageCode(
+                deviceLanguageCode: deviceLanguageCode,
+                supported: supported))
     }
 }
 
@@ -342,6 +405,9 @@ struct ContentView: View {
 struct MagnifierTab: View {
     /// 由 `ContentView` 的 `ZStack` 上挂的 `.environmentObject(coordinator)` 提供。
     @EnvironmentObject private var coordinator: ReaderLaunchCoordinator
+    /// 只有模拟器分支那条「See how reading works」按钮读它。真机上放大镜**没有**实时
+    /// 文字层了（理由见 `MagnifierView` 里预览那段注释），所以真机构建里它无从被读——
+    /// 留着是因为模拟器构建仍然需要它，而且这是 `ContentView` 交下来的既有接口。
     let onTextDetected: (String) -> Void
     let settings: SettingsModel
     @State private var showMagnifier = false
@@ -375,7 +441,6 @@ struct MagnifierTab: View {
             .navigationTitle(L10n.appName)
             #else
             MagnifierView(
-                onTextDetected: onTextDetected,
                 onCapture: { source in
                     // `onCapture` 是同步回调，`open(image:)` 是 async，所以要起一个 Task。
                     // 这个 Task 是不受结构化管理的一次性任务，没有任何人持有它的句柄。

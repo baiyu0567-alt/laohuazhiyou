@@ -7,6 +7,12 @@ struct RecognizedBlock: Equatable {
     let text: String
     /// 0 = 画面顶部，1 = 画面底部。用于恢复阅读顺序。
     let topYRatio: Double
+    /// Vision 给这个块的置信度（0–1）。
+    ///
+    /// 只用来判断「这一次识别整体可不可信」（见 `ReaderLaunchCoordinator.looksWeak`）。
+    /// **不要**拿它筛块或排序：实测**正确**识别的块也会低到 0.30（合成图上「用法用量」
+    /// 那一行就是），单块阈值没有意义，只有整批的统计量才分得开好坏。
+    let confidence: Float
 }
 
 /// 唯一接触 Vision 的地方：把「一张图」变成「一串文本块」。
@@ -117,7 +123,43 @@ final class TextRecognitionService {
                 guard let top = obs.topCandidates(1).first else { return nil }
                 let box = obs.boundingBox
                 return RecognizedBlock(text: top.string,
-                                       topYRatio: 1.0 - Double(box.origin.y + box.height))
+                                       topYRatio: 1.0 - Double(box.origin.y + box.height),
+                                       confidence: top.confidence)
             }
+    }
+}
+
+/// 本机 Vision 实际支持的识别语言码。
+///
+/// **运行时查询，不硬编码一份清单。** 硬编码的话，一旦某台设备或某个系统版本的清单比
+/// 我们写的那份少，用户就能在设置页里选中一个本机根本不存在的模型——Vision 不会报错，
+/// 只会安静地用别的模型识别，正是 `RecognitionLanguage` 一直在防的那个失败模式。
+/// 查询还有个附带好处：系统以后加语言，我们自动跟上。
+///
+/// 取的是**本进程真正会用的那个 revision**（`VNRecognizeTextRequest()` 的默认值），
+/// 而不是写死的 `VNRecognizeTextRequestRevision3`：真机默认 revision 若随系统升级，
+/// 这份清单跟着走，写死的那个不会。
+enum OCRSupportedLanguageCodes {
+
+    /// 本机 `.accurate` 档支持的全部语言码。本机实测 33 种。
+    ///
+    /// 用 `.accurate` 而不是 `.fast`：`.fast` 只有 en/fr/it/de/es/pt 六种、**没有中文**，
+    /// 对中文图返回 0 个结果，而中文正是本 App 的主要场景。
+    static let all: [String] = {
+        let probe = VNRecognizeTextRequest()
+        probe.recognitionLevel = .accurate
+        // 用**实例方法**，不用类方法 `supportedRecognitionLanguages(for:revision:)`：
+        // 后者从 iOS 15 起已废弃，且要求调用方把 level 和 revision 再抄一遍——抄错任何
+        // 一处就得到另一份清单，而清单错了不会报错。实例方法直接读这个请求自己的
+        // level/revision，上面两行怎么配、清单就跟着怎么变。
+        let codes = (try? probe.supportedRecognitionLanguages()) ?? []
+        // 查询失败也得给一份能用的：设置页的列表、以及「跟随系统」的解析都靠它，
+        // 空清单会让默认档退化成英文。
+        return codes.isEmpty ? ["en-US"] : codes
+    }()
+
+    /// 按本族名排序，给设置页的列表用。Vision 返回的顺序既不是字母序也不是语言序。
+    static let sorted: [String] = all.sorted {
+        RecognitionLanguage.displayName(for: $0) < RecognitionLanguage.displayName(for: $1)
     }
 }

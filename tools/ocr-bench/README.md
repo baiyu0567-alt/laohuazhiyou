@@ -90,8 +90,28 @@ PresbyFriend 的 iOS 版用 Vision 做图片 OCR。它的失败模式很隐蔽�
 ```
 
 不需要图片。它把 `RecognitionLanguage.swift` 的生产代码原文件直接编进来（见 `build.sh`），
-断言 `.system` 在 zh-Hans / zh-Hant / **ZH-Hans** / zh-CN 下都返回 `["zh-Hans"]`，其余返回
-`["en-US"]`，并含一条「中文场景首位不是 en-US」的回归断言。全部通过时退出码为 0。
+共 142 条断言，覆盖七组规则。**「本机 Vision 支持清单」以参数注入**，用的是真机实测的
+33 种那份固定清单，所以这套断言不依赖跑它的机器。
+
+1. **设备语言 → Vision 码 `systemLanguageCode`**：`de-AT` → `de-DE`、裸 `ja` → `ja-JP`、
+   大小写不敏感；中文/粤语**按文字分档**（`zh-TW`/`zh-HK`/`zh-MO` 没有文字标记也判繁体）；
+   把清单倒序结果不变（证明分档不靠 `hasPrefix` 撞对）；设备清单里没有繁体时落简体；
+   设备语言 Vision 不认识（冰岛语）落英文，而不是递一个不存在的码
+2. **`visionLanguages`**：跟随系统取设备那一档；手动档与设备语言**完全无关**
+   （德语设备 + 手动中文 → `zh-Hans`）；手动码本机不支持时落 `["en-US"]`
+3. **`effectiveLanguageCode` 与 `visionLanguages` 一致**：两者分家的话，设置页的 ❗
+   和阅读页的提示会描述一件实际没发生的事
+4. **旧存储值迁移 `stored(from:supported:)`**：`chinese`/`english`/`german`… 那批档位名
+   映射到码，`system`/`followApp` 都映射到 `.followSystem`；来路不明的码（`is-IS`）返回 nil。
+   另含一条「旧档位名不查 `supported`」——它固定给出自己的码，能不能用由使用那一刻兜底
+5. **往返**：33 个码逐个存得下、读得回、且真的喂给 Vision
+6. **选项名 `displayName(for:)`**：5 个手工覆盖断言字面值；其余靠 `Locale` 生成，
+   只断言性质（无空名、两两不撞名）——**不断言字面值**，那取决于系统 locale 数据，
+   写死会让测试换台机器就假报错
+7. **回归**：10 个中文/粤语设备语言都不许把 `en-US` 放首位（英文模型遇汉字静默输出垃圾，
+   实测 `用法用量` → `mzms`）；德语设备不再拿到英文（改动前的默认档就是那样）
+
+全部通过时退出码为 0。
 
 ### `ordercheck` — 断言文本块阅读顺序
 
@@ -102,6 +122,11 @@ PresbyFriend 的 iOS 版用 Vision 做图片 OCR。它的失败模式很隐蔽�
 不需要图片，也不需要 OCR。它把 `TextRecognitionService.blocks(from:)` 这个生产比较器
 原文件直接编进来，断言：同一基线上（`origin.y` 相等）的两个块按 `minX` 升序——**左栏在前**；
 把输入顺序倒过来结果不变；主序（画面自上而下）不被平局分支盖掉；同一输入重排 200 次结果一致。
+
+它必须编成 iOS 模拟器目标（比较器的输入类型是 `VNRecognizedTextObservation`），所以跑不了
+就不能直接执行——见 `build.sh` 里那套按 UDID `simctl spawn` 的逻辑。
+`RecognitionLanguage.swift` 也在它的编译清单里：`TextRecognitionService` 的语言码目录
+（`OCRSupportedLanguageCodes.sorted`）要调 `displayName(for:)`，少了这个文件整个编译不过。
 
 为什么不能像别的工具一样编成 macOS 可执行：比较器的输入类型是 `VNRecognizedTextObservation`，
 只有 iOS SDK 有。所以 `build.sh` 把它编成 `arm64-apple-ios16.0-simulator`，

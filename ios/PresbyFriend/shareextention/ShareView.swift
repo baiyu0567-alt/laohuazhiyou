@@ -129,13 +129,22 @@ struct ShareView: View {
     }
 
     private func loadImage(_ source: OCRImageSource) async {
-        // `Locale.preferredLanguages.first`，不是 `Locale.current`：后者按本 App 的本地化
-        // 过滤过，中文设备上返回 `en`，`.system` 就永远选不到中文模型（同 App 内
-        // `ContentView.applyRecognitionLanguages()` 的理由与实测）。
+        // 与 App 内 `ContentView.applyRecognitionLanguages()` 同一套输入：**设备语言** +
+        // 用户选的档位。两边共享同一个 `SettingsModel`（`ios-v1` 上经 App Group），
+        // 所以同一台设备上 App 和扩展解析出同一档。
+        //
+        // ⚠️ 本分支 `device-test-noshare` 关掉了 App Group（免费 Personal Team 签不了），
+        // 扩展读到的 `settings.recognitionLanguage` 是它自己容器里的默认值 `.followSystem`，
+        // 而设备语言两边是同一个，所以**默认档在扩展里依然是对的**——这一点比改动前好：
+        // 以前这里读的是 `settings.language`（界面语言），扩展拿到的一律是 `"en"`，
+        // 于是「跟随 App 语言」在扩展里恒为 `en-US`。现在默认档不再依赖那个读不到的值了。
+        // 仍然读不到的是**用户手动选的档位**，那要等合并回 `ios-v1`（App Group 恢复）。
+        let deviceLanguageCode = Locale.preferredLanguages.first
         let service = TextRecognitionService(
             languages: RecognitionLanguage.visionLanguages(
-                systemLanguageCode: Locale.preferredLanguages.first,
-                preference: settings.recognitionLanguage))
+                deviceLanguageCode: deviceLanguageCode,
+                preference: settings.recognitionLanguage,
+                supported: OCRSupportedLanguageCodes.all))
 
         // 这里不能再用 `try?`：它把 Vision 的抛错折成 `[]`，和「这张图真的没有文字」
         // 撞成同一个值，于是识别失败会被当成空结果报给用户。两种结果必须留下

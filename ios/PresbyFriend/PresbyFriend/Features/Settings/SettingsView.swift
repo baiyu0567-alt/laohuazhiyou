@@ -21,18 +21,43 @@ struct SettingsView: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
+                        // 这个数字**真的按 `vm.fontSize` 渲染**，是刻意的预览——让用户当场
+                        // 看到调大之后有多大。
+                        //
+                        // 但预览不能反过来改这一行的布局：`Slider` 钉死 120pt、两个按钮各 36pt，
+                        // 留给这段文字的只有约 119pt；而「72px」按 72pt 排开要 ~160pt。宽度不够
+                        // 它会折成两行（预置 64 启动的截图里，「64」和「px」已经分了两行），
+                        // 整行随之变高，滑块就在用户手指底下移位。
+                        //
+                        // 所以钉死宽度 + 限单行 + 放不下就缩字号：预览保留，行高与滑块位置恒定。
                         Text("\(Int(vm.fontSize))px")
                             .font(.system(size: CGFloat(vm.fontSize)))
                             .foregroundColor(.primary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.4)
+                            .frame(width: 104, alignment: .leading)
                         Spacer()
+                        // `.buttonStyle(.borderless)` 是**必须的**，不是修饰。
+                        //
+                        // `Form` 是 `List` 的皮。行内 `Button` 用默认的 `.automatic` 样式时，
+                        // 样式会「适配容器」——点击目标被放大到**整行**。一行里只有一个按钮时
+                        // 这样没问题（整行点哪儿都算它）；这一行有两个，两个都被放大到同一整行，
+                        // 手势就分不出该给谁，两个按钮**都不响应**。
+                        // 而 `Slider` 不是 `Button`，不走这条样式解析，自己的拖动照旧——这正是
+                        // 「滑块能拖、两头的按钮按不动」的成因。
+                        //
+                        // 修法是给**两个**按钮都打上显式样式：只打一个没用，没打的那个
+                        // 仍旧用 `.automatic`、仍旧铺满整行，会把打在另一个上的手势一起吃掉。
                         Button { vm.fontSize = max(24, vm.fontSize - 4) } label: {
                             Image(systemName: "minus.circle.fill").font(.system(size: 36))
                         }
+                        .buttonStyle(.borderless)
                         Slider(value: $vm.fontSize, in: 24...72, step: 4)
                             .frame(width: 120)
                         Button { vm.fontSize = min(72, vm.fontSize + 4) } label: {
                             Image(systemName: "plus.circle.fill").font(.system(size: 36))
                         }
+                        .buttonStyle(.borderless)
                     }
                 }
                 .padding(.vertical, 8)
@@ -86,17 +111,42 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Picker(L10n.ocrLanguage, selection: $vm.recognitionLanguage) {
-                        ForEach(RecognitionLanguage.allCases) { option in
-                            Text(label(for: option))
+                    // ❗ 只在「实际用的识别语言 ≠ 系统语言那一档」时出现。常驻的话它在一个
+                    // 一切正常的设置页上就只是个装饰；只在真的不一致时亮，它才带信息。
+                    Picker(isLanguageMismatch ? "❗️ " + L10n.ocrLanguage : L10n.ocrLanguage,
+                           selection: $vm.recognitionLanguage) {
+                        Text(L10n.ocrLanguageFollowSystem)
+                            .font(bodyFont)
+                            .tag(RecognitionLanguage.followSystem)
+                        // 手动档来自 Vision 的运行时清单（本机 33 种），不是写死的一份，
+                        // 见 `OCRSupportedLanguageCodes`。名字用本族名，见
+                        // `RecognitionLanguage.displayName(for:)`。
+                        ForEach(supportedLanguageCodes, id: \.self) { code in
+                            Text(RecognitionLanguage.displayName(for: code))
                                 .font(bodyFont)
-                                .tag(option)
+                                .tag(RecognitionLanguage.manual(code))
                         }
                     }
                     .font(labelFont)
+
+                    // 选了「跟随系统」之后，界面上看不出实际用的是哪个模型——这一行写出来。
+                    // 没有它的话，第一项和它的含义之间是断的，用户没法确认它究竟解析成了什么。
+                    HStack {
+                        Text(L10n.ocrLanguageCurrent)
+                            .font(bodyFont)
+                        Spacer()
+                        Text(RecognitionLanguage.displayName(for: effectiveLanguageCode))
+                            .font(bodyFont)
+                            .foregroundColor(.secondary)
+                    }
                 } footer: {
-                    Text(L10n.ocrLanguageDesc)
-                        .font(bodyFont)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(L10n.ocrLanguageDesc)
+                        if isLanguageMismatch {
+                            Text(L10n.ocrLanguageWarning)
+                        }
+                    }
+                    .font(bodyFont)
                 }
 
                 Section {
@@ -149,11 +199,27 @@ struct SettingsView: View {
         .onChange(of: vm.recognitionLanguage) { _ in vm.save(to: settings) }
     }
 
-    private func label(for option: RecognitionLanguage) -> String {
-        switch option {
-        case .system:  return L10n.ocrLanguageSystem
-        case .chinese: return L10n.ocrLanguageChinese
-        case .english: return L10n.ocrLanguageEnglish
-        }
+    // MARK: - 识别语言
+
+    /// 手动档的选项来源，按本族名排序。
+    private var supportedLanguageCodes: [String] { OCRSupportedLanguageCodes.sorted }
+
+    /// 这一档实际会用哪个模型。「跟随系统」由设备语言解析而来，手动档就是它自己。
+    private var effectiveLanguageCode: String {
+        RecognitionLanguage.effectiveLanguageCode(
+            deviceLanguageCode: Locale.preferredLanguages.first,
+            preference: vm.recognitionLanguage,
+            supported: OCRSupportedLanguageCodes.all)
+    }
+
+    /// 实际用的与系统语言那一档是不是同一个。❗ 和提示文案都由它决定。
+    ///
+    /// 两边的码来自同一个 `supported` 和同一个设备语言码，比较才有意义；
+    /// 各算各的（比如拿 `vm.recognitionLanguage` 直接和 `Locale` 比）会得到
+    /// 「永远不一致」或「永远一致」这种恒定的假结果。
+    private var isLanguageMismatch: Bool {
+        effectiveLanguageCode != RecognitionLanguage.systemLanguageCode(
+            deviceLanguageCode: Locale.preferredLanguages.first,
+            supported: OCRSupportedLanguageCodes.all)
     }
 }
