@@ -82,6 +82,29 @@ final class TextRecognitionService {
                 // 必须 .accurate：.fast 档不支持中文（只有 en/fr/it/de/es/pt），
                 // 对中文图返回 0 个结果，没有「降档换速度」的余地。
                 request.recognitionLevel = .accurate
+                // 让 Vision 自己判脚本（拉丁 / 中文），而不是**认准清单第一项**。
+                //
+                // 实测（自己渲染一页英文真值 56 词，退化到「拍得有点远」那一档）：
+                // 清单以 `zh-Hans` 开头时**错 44 个词**——整行的词成片消失，
+                // 剩下的读成 `orse` / `tabie` / `thvee` 这种；把 `en-US` 提到第一项
+                // 就只错 4 个。也就是说英文识别好坏几乎不取决于「英文模型行不行」，
+                // 只取决于**第一项是谁**。而用户系统语言是中文时第一项就是 `zh-Hans`，
+                // 这正是真机上「拍英文效果一般」的来源。
+                //
+                // 打开这个开关后，同一档退化下 `--auto` 与 `en-US` 优先**逐词相同**（4 个错），
+                // 且**无视清单**——清单仍写 `zh-Hans,en-US` 也是 4 个错。
+                // 中文那张真机照片上则**逐字不变**（61 条观测、61 行文本全等）：
+                // 这个开关不覆盖已有判断时就是空操作，不会把中文改坏。
+                //
+                // 头文件里那句「advisable to set the languages, if you have domain knowledge
+                // of what language to expect」正是这里保留 `recognitionLanguages` 的理由：
+                // 它从「选模型的开关」降级成「判错时的倾向」，用户设的语言仍然算数。
+                //
+                // 唯一的保留：该开关**只在 revision 3 起有效，之前是空操作**，而 3 恰好是
+                // iOS 16.0 引入的（= 本工程部署目标）。已确认当前 runtime 默认 revision = 3
+                // （= `supportedRevisions` 里的最大值），但手头只有 iOS 26.5 一款 runtime，
+                // 「iOS 16 上默认也是 3」是**推断**。所幸推断错了也不亏：空操作即退回今天的行为。
+                request.automaticallyDetectsLanguage = true
                 request.recognitionLanguages = languages
                 request.usesLanguageCorrection = true
 
