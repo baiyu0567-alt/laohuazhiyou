@@ -1,16 +1,13 @@
 import SwiftUI
-import VisionKit
 import AVFoundation
 
 struct MagnifierView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var vm = MagnifierViewModel()
-    @State private var selectedText: String?
-    @State private var dataScannerAccessGranted = false
     /// 按下快门后那一次拍照 + 交棒。存下句柄是为了离开页面时能取消它：
     /// `onDisappear` 会 `stopSession()`，此后拍照回调不再保证会来，取消才能让
     /// `capturePhoto()` 里在途的 continuation 立刻以「没拍到」收尾。
     @State private var captureTask: Task<Void, Never>?
-    let onTextDetected: ((String) -> Void)?
     let onCapture: ((OCRImageSource) -> Void)?
 
     private var isSimulator: Bool {
@@ -43,29 +40,18 @@ struct MagnifierView: View {
                 }
                 .padding()
             } else if vm.cameraAccessGranted {
-                // Camera preview + Live Text overlay
+                // 预览。这里曾经叠着一层 `DataScannerViewController`（VisionKit 的实时文字），
+                // 它自带一套 `AVCaptureSession`，和我们的会话抢同一颗后置摄像头。真机日志里
+                // 我们的会话被以 reason 3 中断（`VideoDeviceInUseByAnotherClient`），预览层
+                // 冻在最后一帧——**去掉它，这颗摄像头的所有者就只剩一个**。文字照旧能读：
+                // 按快门 → OCR → 阅读页，只多按一下。
                 CameraPreview(session: vm.session)
                     .ignoresSafeArea()
 
-                if dataScannerAccessGranted {
-                    LiveTextScanner { text in
-                        onTextDetected?(text)
-                    }
-                    .ignoresSafeArea()
-                    .allowsHitTesting(true)
-                }
-
-                // Tap hint
-                VStack {
-                    Spacer().frame(height: 100)
-                    Text(L10n.tapTextToRead)
-                        .font(.title2)
-                        .foregroundColor(.white)
-                        .padding(12)
-                        .background(.ultraThinMaterial)
-                        .cornerRadius(8)
-                    Spacer()
-                }
+                // 原本这里还有一条「点文字就能读」的提示（`L10n.tapTextToRead`）。它指的是
+                // 上面那层实时文字——层没了，提示照留着就是一句假话，所以一并去掉。
+                // 键也删干净了：`L10n.tapTextToRead` 这个属性、6 个 `Localizable.strings`
+                // 里的 `tap_text_to_read` 都不留，免得在文件里当孤儿（本工程已无引用）。
 
                 // Controls overlay
                 VStack(spacing: 16) {
@@ -146,8 +132,6 @@ struct MagnifierView: View {
         .task {
             guard !isSimulator else { return }
             await vm.requestAccess()
-            dataScannerAccessGranted = DataScannerViewController.isSupported &&
-                                       DataScannerViewController.isAvailable
         }
         .onDisappear {
             // 先取消在途的拍照，再停会话：停完之后拍照回调不再保证会来，靠取消
@@ -156,68 +140,155 @@ struct MagnifierView: View {
             captureTask = nil
             vm.stopSession()
         }
+        .onChange(of: scenePhase) { phase in
+            // 只认 `.background`。`.inactive` 是「暂时不活跃」——下拉控制中心、来电
+            // 横幅都会经过它，在那里关灯就成了「拉一下控制中心手电筒就灭」。
+            //
+            // 进后台时**系统会自己**中断并停掉会话（真机日志：`wasInterrupted reason=1`
+            // 紧跟 `didStopRunning`，回前台时再由系统发 `interruptionEnded` 并
+            // `didStartRunning` 起回来——所以会话那一侧不需要我们做任何事），
+            // 但**灯不归它管**：`torchMode` 是设备自己的属性，会话停了它照样亮着。
+            // 真机实测：按亮手电筒 → 最小化 App → 灯一直亮着，用户已经看不见 App 了，
+            // 还得再打开它才能把灯关掉。
+            guard phase == .background else { return }
+            vm.turnOffFlashlight()
+        }
     }
 }
 
 // MARK: - Camera Preview
 
-struct CameraPreview: UIViewRepresentable {
-    let session: AVCaptureSession
+/// 预览层的容器。**这个子类存在的唯一理由就是 `layerClass`。**
+///
+/// 改前的写法是：给一个裸 `UIView` 手动 `addSublayer` 一个 `AVCaptureVideoPreviewLayer`，
+/// 再在 `updateUIView` 里把层的 frame 设成 `uiView.bounds`——**那是该层尺寸的唯一赋值点**。
+/// 真机（iPhone 11 Pro Max）量出来的是：
+/// ```
+/// makeUIView      bounds=(0,0,0,0)  layerFrame=(0,0,0,0)
+/// updateUIView #1 bounds=(0,0,0,0)  layerFrame=(0,0,0,0)
+/// ```
+/// `#1` 之后再没有 `#2`。两个原因叠在一起：
+/// 1. 第一次被调用时 SwiftUI **还没排版**，`bounds` 就是 `.zero`；
+/// 2. 之后 SwiftUI **不再调用它**——`CameraPreview` 的存储属性只有 `let session`，
+///    body 重新求值时这个值没变，SwiftUI 比对后跳过更新。（当时 `didStartRunning`
+///    确实触发了 body 重新求值，仍然没有第二次调用。）
+///
+/// 于是预览层永远停在 0 尺寸，屏幕上只剩背景色。而会话那一侧一切正常：
+/// 同一份日志里 `session.isRunning` 与 `isSessionRunning` 都是 true、`wasInterrupted` 为零
+/// ——**「会话在跑」和「看得见画面」是两件事，这条正是把它们分开的那道缝**。
+///
+/// 这个缺陷此前一直没被发现，是因为它上面压着一层全屏的 `DataScannerViewController`
+/// （人家自带画面），把下面遮住了；把那层撤掉它才露出来。
+///
+/// `layerClass` 把预览层直接做成 view 的**背景层**：尺寸由 UIKit 跟着 view 走，不需要
+/// 任何人记账，也不依赖 `updateUIView` 何时被调用。这是 Apple 在 AVCam 里的写法。
+final class CameraPreviewView: UIView {
+    override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
 
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
-        let preview = AVCaptureVideoPreviewLayer(session: session)
-        preview.videoGravity = .resizeAspectFill
-        view.layer.addSublayer(preview)
-        context.coordinator.previewLayer = preview
-        return view
+    /// `layerClass` 已经定死了背景层的类型，这一转换不会失败。
+    var previewLayer: AVCaptureVideoPreviewLayer {
+        layer as! AVCaptureVideoPreviewLayer
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
-        context.coordinator.previewLayer?.frame = uiView.bounds
-        context.coordinator.previewLayer?.session = session
+    /// 「会话开始跑」的观察者。连接是会话配上输入才建的，而**进页面时手机就是横的**
+    /// 这一路里，那之后不会再有一次 `layoutSubviews`（bounds 没变过）——只靠
+    /// `layoutSubviews` 会漏掉它，画面就一直是转着的。这条通知是那次补做的机会。
+    private var didStartObserver: NSObjectProtocol?
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        guard window != nil else {
+            // 离开层级就把观察者摘掉：SwiftUI 重建这个 view 时不会替我们摘，
+            // 而基于 block 的观察者不像 selector 那种会在对象释放时自动注销。
+            if let didStartObserver { NotificationCenter.default.removeObserver(didStartObserver) }
+            didStartObserver = nil
+            return
+        }
+        if didStartObserver == nil, let session = previewLayer.session {
+            didStartObserver = NotificationCenter.default.addObserver(
+                forName: AVCaptureSession.didStartRunningNotification,
+                object: session,
+                queue: .main
+            ) { [weak self] _ in
+                // 通知是会话在 `sessionQueue` 上跑起来之后发的，显式回主 actor 再碰
+                // UIKit 对象；两个 target 的默认隔离不同（见 `isSessionRunning` 的注释），
+                // 所以不靠隔离、统一显式回。
+                Task { @MainActor in self?.applyInterfaceOrientation() }
+            }
+        }
+        applyInterfaceOrientation()
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    /// 旋转会改变 view 的 bounds，所以这是「转屏了」的信号。
+    ///
+    /// 这条路在真机上量到过：横竖屏各转一次，`videoOrientation` 依次是
+    /// `1 → 3`、`3 → 1`、`1 → 4`、`4 → 1`（`1` 竖屏，`3` 横屏 home 键在右，
+    /// `4` 横屏 home 键在左）。
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        applyInterfaceOrientation()
+    }
 
-    class Coordinator {
-        var previewLayer: AVCaptureVideoPreviewLayer?
+    /// 把「界面现在朝哪边」写进预览连接。
+    ///
+    /// 没有这一步，连接就停在 AVFoundation 自己的默认方向（竖屏）上。真机上量到的
+    /// 就是这条：界面已经横过来了，连接的 `videoOrientation` 还是 `1`（竖屏）。于是
+    /// 传感器画面照竖屏摆，**整幅画面转 90°**，而 `videoGravity = .resizeAspectFill`
+    /// 又按错的方向去裁切，横竖屏看到的范围因此也不一样。
+    ///
+    /// 只有 iOS 17 起才有 `AVCaptureDevice.RotationCoordinator`（本项目的最低版本是
+    /// 16.0），所以这里是 iOS 16 上唯一的做法：拿界面方向，手工写进连接。
+    private func applyInterfaceOrientation() {
+        guard let connection = previewLayer.connection,
+              connection.isVideoOrientationSupported,
+              let target = AVCaptureVideoOrientation(
+                interfaceOrientation: window?.windowScene?.interfaceOrientation) else { return }
+        // 值没变就不写：`layoutSubviews` 会被叫很多次，而给连接重复赋同一个值是白做。
+        guard connection.videoOrientation != target else { return }
+        connection.videoOrientation = target
     }
 }
 
-// MARK: - Live Text Scanner
+extension AVCaptureVideoOrientation {
+    /// 界面方向 → 采集连接方向。**这是恒等映射，不是交叉映射**——别照着
+    /// `UIDeviceOrientation` 那边的直觉改。
+    ///
+    /// 两份头文件对着读出来的（不靠记忆）：
+    /// - UIKit 这边，`UIInterfaceOrientationLandscapeLeft` 的**定义**就是
+    ///   `UIDeviceOrientationLandscapeRight`，`UIOrientation.h:39-40` 写着理由：
+    ///   「rotating the device to the left requires rotating the content to the right」；
+    ///   而 `UIDeviceOrientationLandscapeRight` 是「home button on the **left**」
+    ///   （同文件 `:18`）。
+    /// - AVFoundation 这边，`AVCaptureVideoOrientationLandscapeLeft` 是
+    ///   「port on the **left**」（`AVCaptureDevice.h`，port 就是 home 键那一侧的接口）。
+    ///
+    /// 两边指的是**同一个物理边**，所以逐字相同。相机是后置（`MagnifierViewModel`
+    /// 那三个 `position: .back`），也不存在前置镜像要换向的问题。
+    ///
+    /// `.unknown` 返回 nil = **不动连接**。那种状态下面向未知，猜一个方向只会把
+    /// 已经正确的画面拧坏；而返回 `.portrait` 就是一种猜。
+    init?(interfaceOrientation: UIInterfaceOrientation?) {
+        switch interfaceOrientation {
+        case .landscapeLeft:      self = .landscapeLeft
+        case .landscapeRight:     self = .landscapeRight
+        case .portrait:           self = .portrait
+        case .portraitUpsideDown: self = .portraitUpsideDown
+        default:                  return nil
+        }
+    }
+}
 
-struct LiveTextScanner: UIViewControllerRepresentable {
-    let onTextTap: (String) -> Void
+struct CameraPreview: UIViewRepresentable {
+    let session: AVCaptureSession
 
-    func makeUIViewController(context: Context) -> DataScannerViewController {
-        let vc = DataScannerViewController(
-            recognizedDataTypes: [.text()],
-            qualityLevel: .balanced,
-            recognizesMultipleItems: false,
-            isHighFrameRateTrackingEnabled: false,
-            isHighlightingEnabled: true
-        )
-        vc.delegate = context.coordinator
-        try? vc.startScanning()
-        return vc
+    func makeUIView(context: Context) -> CameraPreviewView {
+        let view = CameraPreviewView()
+        view.previewLayer.videoGravity = .resizeAspectFill
+        view.previewLayer.session = session
+        return view
     }
 
-    func updateUIViewController(_ uiViewController: DataScannerViewController, context: Context) {}
-
-    func makeCoordinator() -> Coordinator { Coordinator(onTextTap: onTextTap) }
-
-    class Coordinator: NSObject, DataScannerViewControllerDelegate {
-        let onTextTap: (String) -> Void
-
-        init(onTextTap: @escaping (String) -> Void) {
-            self.onTextTap = onTextTap
-        }
-
-        func dataScanner(_ dataScanner: DataScannerViewController, didTapOn item: RecognizedItem) {
-            if case .text(let text) = item {
-                onTextTap(text.transcript)
-            }
-        }
+    func updateUIView(_ uiView: CameraPreviewView, context: Context) {
+        uiView.previewLayer.session = session
     }
 }

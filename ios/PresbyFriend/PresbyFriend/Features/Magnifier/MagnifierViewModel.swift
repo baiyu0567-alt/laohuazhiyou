@@ -2,6 +2,7 @@ import AVFoundation
 import SwiftUI
 import Combine
 import CoreGraphics
+import OSLog
 
 /// **为什么必须是 `NSObject` 子类**：`AVCapturePhotoCaptureDelegate` 继承
 /// `NSObjectProtocol`，而 Swift 不允许纯 Swift 类声明这个 conformance
@@ -15,6 +16,12 @@ import CoreGraphics
 /// 拍照这块要跨线程碰的状态因此**不能靠默认隔离来保护**，必须自带锁，
 /// 见 `photoSlot` 与 `MagnifierViewModel.photoOutput(_:didFinishProcessingPhoto:error:)`。
 final class MagnifierViewModel: NSObject, ObservableObject {
+    /// 与其它文件同一套构造方式（`ReadTabView`、`PasteControlView`）：subsystem 跟着
+    /// `Bundle.main` 走。本文件同时编译进分享扩展，不在扩展里冒充 App 的标识。
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "com.presbyfriend",
+        category: "magnifier")
+
     @Published var zoomLevel: CGFloat = 2.0
     @Published var flashlightOn: Bool = false
     @Published var cameraAccessGranted: Bool = false
@@ -30,6 +37,9 @@ final class MagnifierViewModel: NSObject, ObservableObject {
     /// `session.isRunning` 闸直接返回 nil——按钮看起来能用，按下去什么都没发生。
     /// 用这个标志让快门在那段窗口里显示成不可用。
     ///
+    /// 值也由会话自己的通知驱动——**中断**（相机被别人抢走、来电、退到后台）不经过
+    /// `stopSession()`，只在起停两处写它会让它停在 true。见 `observeSessionState()`。
+    ///
     /// **只在主线程写**：`startSession()` 的 `startRunning()` 在后台队列上返回，
     /// 若在那里直接赋值，就是一次从后台线程发布的 SwiftUI 变更。
     ///
@@ -40,7 +50,8 @@ final class MagnifierViewModel: NSObject, ObservableObject {
     /// 显式回 `@MainActor` 再写。
     @Published private(set) var isSessionRunning = false
 
-    /// 会话代次。每次 `startSession()` / `stopSession()` 自增。
+    /// 会话代次。`startSession()`、`stopSession()`、以及会话**真的停下**时
+    /// （`didStopRunningNotification`，见 `observeSessionState()`）各自增一次。
     ///
     /// **为什么需要它**：`startSession()` 把 `startRunning()` 丢到 `sessionQueue` 上阻塞执行，收尾
     /// 却是一个独立的 `Task { @MainActor }`。那个收尾可能在 `stopSession()`（它把
@@ -114,6 +125,83 @@ final class MagnifierViewModel: NSObject, ObservableObject {
     /// 自建一把专用队列也不会被预热拖住。（本段以前是错的，已改正。）
     private let photoSlot = PhotoCaptureSlot()
 
+    /// 会话通知的观察者句柄。见 `observeSessionState()`。
+    private var sessionObservers: [NSObjectProtocol] = []
+
+    override init() {
+        super.init()
+        observeSessionState()
+        observeSessionDiagnostics()
+    }
+
+    /// 让 `isSessionRunning` 跟着会话的**真实**状态走。
+    ///
+    /// **为什么只在 `startSession()` / `stopSession()` 里写它不够**：会话停下来有两条
+    /// 路，只有一条经过我们的代码。`stopSession()` 是**我们要停**；另一条是会话**被
+    /// 中断**——相机被另一个 `AVCaptureSession` 抢走（`wasInterruptedNotification` 的
+    /// `AVCaptureSessionInterruptionReasonKey` 为 3，`VideoDeviceInUseByAnotherClient`）、
+    /// 来电、退到后台、系统压力。中断不经过 `stopSession()`，`isSessionRunning` 于是
+    /// 停在 true。
+    ///
+    /// 真机日志（iPhone 11 Pro Max）实测到分叉的那一刻，正是用户拖缩放滑杆时：
+    /// ```
+    /// PFDIAG [zoom] level=2.2 session.isRunning=false isSessionRunning=true
+    /// ```
+    /// 后果是他看到的那样：预览层冻在最后一帧，而快门照常显示可用、滑杆照常响应
+    /// 手势——「页面是活的，画面不动」。
+    ///
+    /// `didStartRunning` / `didStopRunning` 是 AVFoundation 在会话**真的**起停那一刻
+    /// 发的，正是 `isSessionRunning` 想表达的那件事，所以用它俩而不是自己推断。中断时
+    /// `didStopRunning` 会跟着 `wasInterrupted` 一起来（真机日志顺序：
+    /// `wasInterrupted` → `didStopRunning`），所以不必单独盯 `wasInterrupted`。
+    ///
+    /// `didStopRunning` 里那手自增，与 `stopSession()` 里的是同一手、同一个道理：作废
+    /// 在途的那次 `startSession()` 收尾（见 `sessionGeneration`），否则它会在这之后把
+    /// `isSessionRunning` 写回 true——而那个值恰恰是这个函数要断开的东西。这条正是
+    /// `sessionGeneration` 注释里说的那次竞态，只是触发者除了 `stopSession()` 还有中断。
+    private func observeSessionState() {
+        let center = NotificationCenter.default
+        for (name, running) in [
+            (AVCaptureSession.didStartRunningNotification, true),
+            (AVCaptureSession.didStopRunningNotification, false),
+        ] {
+            sessionObservers.append(center.addObserver(
+                forName: name, object: session, queue: .main
+            ) { [weak self] _ in
+                // 显式回 `@MainActor` 再写 `@Published`：两个 target 的默认隔离不同
+                // （见 `isSessionRunning` 的注释），所以不押在默认隔离上——与
+                // `startSession()` 收尾处同一写法。
+                Task { @MainActor in
+                    guard let self else { return }
+                    if !running { self.sessionGeneration += 1 }
+                    self.isSessionRunning = running
+                }
+            })
+        }
+    }
+
+    /// ⚠️【临时诊断·device-test-noshare】随分支作废。
+    /// 这一轮要看的是：去掉 `DataScannerViewController` 之后，`wasInterrupted`（尤其
+    /// reason 3）还会不会来。若不来了，就等于反向坐实了诊断。修好之后整段删除——
+    /// `observeSessionState()` 本身不带任何日志。
+    private func observeSessionDiagnostics() {
+        let center = NotificationCenter.default
+        let names: [(Notification.Name, String)] = [
+            (AVCaptureSession.wasInterruptedNotification, "wasInterrupted"),
+            (AVCaptureSession.interruptionEndedNotification, "interruptionEnded"),
+            (AVCaptureSession.didStartRunningNotification, "didStartRunning"),
+            (AVCaptureSession.didStopRunningNotification, "didStopRunning"),
+            (AVCaptureSession.runtimeErrorNotification, "runtimeError"),
+        ]
+        for (name, label) in names {
+            sessionObservers.append(center.addObserver(
+                forName: name, object: session, queue: .main
+            ) { note in
+                print("PFDIAG [session] \(label) userInfo=\(String(describing: note.userInfo))")
+            })
+        }
+    }
+
     func requestAccess() async {
         let status = AVCaptureDevice.authorizationStatus(for: .video)
         switch status {
@@ -138,6 +226,7 @@ final class MagnifierViewModel: NSObject, ObservableObject {
         // （见 `sessionGeneration` 的注释）。
         sessionGeneration += 1
         let token = sessionGeneration
+        print("PFDIAG [lifecycle] startSession token=\(token)")
         sessionQueue.async { [weak self] in
             guard let self else { return }
             do {
@@ -149,6 +238,7 @@ final class MagnifierViewModel: NSObject, ObservableObject {
                 if self.session.canAddOutput(self.photoOutput) { self.session.addOutput(self.photoOutput) }
                 self.session.commitConfiguration()
                 self.session.startRunning()
+                print("PFDIAG [lifecycle] startRunning returned, isRunning=\(self.session.isRunning)")
                 // 回主线程再写 `@Published`：这段闭包跑在 `sessionQueue` 上（`startRunning()`
                 // 会阻塞，不能占住主线程），在这里直接赋值就是从后台线程发布一次 SwiftUI 变更。
                 // 两个 target 的默认隔离不同（见 `isSessionRunning` 的注释），所以不靠隔离，
@@ -185,7 +275,44 @@ final class MagnifierViewModel: NSObject, ObservableObject {
         } catch {}
     }
 
+    /// 关手电筒，并把 `flashlightOn` 归位。
+    ///
+    /// **会话停了不等于灯灭了。** `torchMode` 是设备自己的属性：App 进后台时系统会
+    /// 中断并停掉会话（真机日志：`wasInterrupted reason=1` 紧跟 `didStopRunning`），
+    /// 灯却照样亮着——用户已经看不见 App 了，灯还亮着，只能再打开 App 去关。
+    /// 真机实测就是如此：按亮手电筒 → 最小化 App → 灯一直亮。
+    ///
+    /// 闸放在**设备**上而不是 `flashlightOn` 上：`stopSession()` 一直这么写，
+    /// 而设备的真实状态才是这件事的依据。
+    ///
+    /// **`do/catch` 在这里不是风格问题，是必须的。** 这里原先是
+    /// `try? device.lockForConfiguration()` 紧跟一行**无条件**的
+    /// `device.torchMode = .off`。`try?` 只把「锁定失败」变成 nil，**不会跳过下一行**
+    /// ——锁没拿到，赋值照执行。而 `AVCaptureDevice.h:1127` 写得很明白：
+    /// `-setTorchMode:` **在未持有 `lockForConfiguration:` 的情况下抛
+    /// `NSGenericException`**。那是 ObjC 异常，Swift 侧 `try?` 接不住，直接终止进程。
+    ///
+    /// 锁失败不是理论情形：它恰恰是这台设备正被别的东西占着时会发生的事，而这个函数
+    /// 被叫到的两个场合（离开放大镜页、App 进后台）**都是**系统正在动这颗摄像头的
+    /// 时候。本文件另外两处拿设备锁的地方（`applyZoom()`、`toggleFlashlight()`）
+    /// 本来就是 `do/catch`，只有这一处是 `try?`。
+    func turnOffFlashlight() {
+        flashlightOn = false
+        guard let device, device.hasTorch, device.torchMode == .on else { return }
+        do {
+            try device.lockForConfiguration()
+            device.torchMode = .off
+            device.unlockForConfiguration()
+        } catch {
+            // 锁拿不到就关不了灯——没有 API 能绕过设备锁，这条路上没有备用手段。
+            // 但**必须留痕**：这一路失败的样子和「修好了」在用户眼里一模一样
+            // （灯还亮着），静默吞掉就等于下次还得从零查一遍。
+            Self.logger.error("Torch off failed, device lock unavailable: \(String(describing: error), privacy: .public)")
+        }
+    }
+
     func stopSession() {
+        print("PFDIAG [lifecycle] stopSession (isRunning=\(session.isRunning))")
         // 与 `startRunning()` 走**同一把**串行队列：改前它是在当前线程（主 actor）同步调用的，
         // 而 `startRunning()` 在全局**并发**队列上——两者可以真的重叠，那是 `AVCaptureSession`
         // 不支持的用法（见 `sessionQueue` 的注释）。顺带把主线程从这次阻塞调用里解放出来。
@@ -193,20 +320,13 @@ final class MagnifierViewModel: NSObject, ObservableObject {
         // 会话停了，拍照回调就不再保证会来。不在这里把在途的那一按收掉的话，
         // 它永远不完成，快门会一直停在忙碌态（`isCapturing` 为真）再也按不动。
         photoSlot.finish(with: nil)
-        if let device, device.hasTorch, device.torchMode == .on {
-            try? device.lockForConfiguration()
-            device.torchMode = .off
-            device.unlockForConfiguration()
-        }
-        flashlightOn = false
+        // 关灯这一步与「App 进后台」共用同一份实现（`turnOffFlashlight()`）：两处要做的
+        // 事一模一样，分开写迟早只改一处。
+        turnOffFlashlight()
         // 与 `isSessionRunning = false` 同处自增：作废在途的那次 `startSession()` 收尾，
         // 否则它会在会话已停之后把 `isSessionRunning` 写回 true（见 `sessionGeneration`）。
         sessionGeneration += 1
         isSessionRunning = false
-    }
-
-    func detectedTextTapped(_ text: String) {
-        // Handled by parent view — navigates to ReaderView
     }
 
     // MARK: - 拍照
