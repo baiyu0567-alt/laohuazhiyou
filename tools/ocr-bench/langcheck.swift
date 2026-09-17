@@ -202,6 +202,84 @@ for code in supported {
 expect(collisions, [], "显示/没有撞名")
 print("  ℹ️ \(supported.count) 个码得到 \(firstOwner.count) 个互不相同的名字")
 
+// MARK: - RecognitionLanguageAudit：认出来的文字像不像我们递交的语言
+
+/// 只调**纯逻辑**那一层（`verdict`），假设由参数喂进来。
+/// 不调 `audit`——它会去问 `NLLanguageRecognizer`，而那是机器上的模型，
+/// 换台机器、换个系统版本都可能给出不同结果，写进断言等于让测试依赖环境
+/// （与上面 `displayName` 只断言性质、不断言字面值同一个理由）。
+func audit(_ asked: [String], _ hyps: [(String, Double)], _ list: [String] = supported) -> String? {
+    RecognitionLanguageAudit.verdict(
+        askedCodes: asked,
+        hypotheses: hyps.map { (code: $0.0, probability: $0.1) },
+        supported: list)?.suggestedCode
+}
+
+// 语言码比较。文字子标签那一半是必需的：zh-Hans 与 zh-Hant 的语言部分都是 zh，
+// 只比语言部分会把它们当成同一门，于是「拿繁体模型读简体文本」会被判成没问题。
+expect(RecognitionLanguageAudit.sameLanguage("en", "en-US"),         true,  "比较/en 与 en-US")
+expect(RecognitionLanguageAudit.sameLanguage("en-US", "en-US"),      true,  "比较/同一个码")
+expect(RecognitionLanguageAudit.sameLanguage("EN-us", "en-US"),      true,  "比较/大小写不敏感")
+expect(RecognitionLanguageAudit.sameLanguage("de", "en-US"),         false, "比较/de 与 en-US")
+expect(RecognitionLanguageAudit.sameLanguage("zh-Hans", "zh-Hans"),  true,  "比较/简体与简体")
+expect(RecognitionLanguageAudit.sameLanguage("zh-Hant", "zh-Hant"),  true,  "比较/繁体与繁体")
+expect(RecognitionLanguageAudit.sameLanguage("zh-Hans", "zh-Hant"),  false, "比较/简体与繁体——文字不同就不是同一门")
+expect(RecognitionLanguageAudit.sameLanguage("zh", "zh-Hant"),       true,  "比较/一边没写文字就不追究")
+expect(RecognitionLanguageAudit.sameLanguage("yue-Hans", "zh-Hans"), false, "比较/粤语与中文不是同一门")
+
+// 下面八条是**实测的八种情况**，假设那两列直接抄测量的输出。
+// 该提示的一律占比 0.00，不该提示的最低 0.92，中间是空的——这就是判定成立的依据。
+expect(audit(["zh-Hans"], [("en", 1.00)]),                                   "en-US",
+       "实测/英文图 + zh-Hans（真机出问题的那种）→ 建议英文")
+expect(audit(["en-US"],   [("en", 1.00)]),                                   nil,
+       "实测/英文图 + en-US → 没问题")
+expect(audit(["en-US"],   [("de", 1.00)]),                                   "de-DE",
+       "实测/德文图 + en-US（同为拉丁字母，最难的一档）→ 建议德文")
+expect(audit(["zh-Hans"], [("zh-Hans", 1.00)]),                              nil,
+       "实测/中文图 + zh-Hans → 没问题")
+expect(audit(["en-US"],   [("pl", 0.44), ("pt", 0.26), ("nl", 0.14)]),       nil,
+       "实测/中文图 + en-US：输出是垃圾——前三名全在清单里，靠置信度 0.44 挡掉，不提示")
+expect(audit(["zh-Hans"], [("en", 0.99)]),                                   "en-US", "实测/英文只 2 行 + zh-Hans")
+expect(audit(["zh-Hans"], [("zh-Hans", 0.92), ("zh-Hant", 0.07), ("ja", 0.02)]), nil,
+       "实测/中文只 2 行 + zh-Hans：占比 0.92，离门槛很远")
+
+// 文字子标签：用简体模型读到繁体文本，该建议换繁体。只比语言部分的话这条会被漏掉。
+expect(audit(["zh-Hans"], [("zh-Hant", 0.90)]), "zh-Hant", "文字/简体模型读到繁体 → 建议繁体")
+
+// 建议的绝不能是**已经在用的**那一档——那是句废话。
+// 这条要靠「求和占比」之外的另一道闸：占比 0.10 已经低于门槛，但最高项正是我们在用的。
+expect(audit(["en-US"], [("en", 0.10), ("de", 0.05)]), nil,
+       "不重复建议/最高项就是在用的那一档 → 不提示")
+
+// 置信度门槛：**建议的那一档，识别器自己也得有把握。**
+// 「在不在清单里」单独用是不够的——pl-PL 就在那 33 条里，光靠清单会把垃圾输出
+// 判成「建议改用波兰语」。这条线才是真正拦住它的东西。
+expect(audit(["en-US"], [("is", 0.90)]), nil,
+       "置信度/冰岛语不在清单里（这一条查的是清单，不是置信度）")
+expect(audit(["en-US"], [("pl", Double(RecognitionLanguageAudit.minimumSuggestionConfidence))]), "pl-PL",
+       "置信度/正好等于门槛 → 算是够格（门槛是「不低于」）")
+expect(audit(["en-US"], [("pl", 0.79)]), nil,
+       "置信度/差一点点 → 不说")
+expect(audit(["en-US"], [("pl", 0.44), ("de", 0.90)]), "de-DE",
+       "置信度/最高项没把握但次高项有 → 用说得准的那个")
+
+// 判不了就不说。
+expect(audit([],        [("en", 1.00)]), nil, "边界/没递交任何语言")
+expect(audit(["en-US"], []),             nil, "边界/一条假设都没有")
+
+// 短文本门槛。**这条能断言，是因为门槛在问模型**之前**就返回了**——
+// 所以无论这台机器上的模型怎么判，结果都是 nil。
+expect(RecognitionLanguageAudit.audit(askedCodes: ["zh-Hans"],
+                                      recognizedText: "DOSAGE",
+                                      supported: supported) == nil, true,
+       "字数门槛/6 字不判（识别器在这个长度会把它判成法语 0.60）")
+expect(RecognitionLanguageAudit.audit(askedCodes: ["zh-Hans"],
+                                      recognizedText: String(repeating: "D", count: 29),
+                                      supported: supported) == nil, true,
+       "字数门槛/29 字仍不判")
+print("  ℹ️ 门槛取 \(RecognitionLanguageAudit.minimumCharacters) 字，占比门槛 \(RecognitionLanguageAudit.massCeiling)")
+print("  ℹ️ 30 字以上那一侧依赖系统模型，本文件不断言——见 README「局限」")
+
 // MARK: - 回归：中文档绝不能把英文模型放第一位
 
 // 英文模型遇汉字会静默输出垃圾（实测 "用法用量" → "mzms"），这是本 App 最容易踩的坑。

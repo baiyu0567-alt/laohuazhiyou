@@ -7,13 +7,31 @@ enum ReaderContent {
     case image(OCRImageSource)
 }
 
-/// 「识别语言可能选错了」这条提示的内容。两个码都交给 UI 去取名，
+/// 「识别语言可能选错了」这条提示的内容。码交给 UI 去取名，
 /// 这里不碰 `L10n`——文案属于视图层。
 struct LanguageHint: Equatable {
+
+    /// 提示在说什么。**两种理由说的话不一样，所以不能合成一个字符串。**
+    ///
+    /// 混用会变成假话：`.textLooksLike` 的场合里，用户根本没有「偏离系统语言」这回事
+    /// （他就在跟随系统），却去告诉他「你的系统语言是别的」。
+    enum Reason: Equatable {
+        /// 这次用的档和**设备语言**解析出来的那一档不是同一个。
+        ///
+        /// 说的是「你的设置相对设备语言」——一个关于**设置**的状态。
+        /// 只在用户手动改过识别语言时才可能出现。
+        case differsFromSystem(systemCode: String)
+
+        /// 认出来的这段文字，看**不像**这次用的那一档。
+        ///
+        /// 说的是「这段文字本身」——一个关于**这次识别结果**的事实，与设备语言无关。
+        /// 设备是中文、设置是「跟随系统」、拍的是英文，走的就是这一条。
+        case textLooksLike(suggestedCode: String)
+    }
+
     /// 这次实际用的识别语言码。
     let usedCode: String
-    /// 设备语言解析出来的那一档。
-    let systemCode: String
+    let reason: Reason
 }
 
 /// 承载「某段内容 → 打开阅读模式」这一个动作，三个入口共用。
@@ -41,9 +59,12 @@ final class ReaderLaunchCoordinator: ObservableObject {
 
     private let ocr = TextRecognitionService()
 
-    /// 这次 OCR 实际用的语言码（`updateLanguages` 里从数组首项取）。
-    private var usedLanguageCode = "en-US"
-    /// 设备语言解析出来的那一档。两者不同才可能出提示。
+    /// 这次 OCR 实际递给 Vision 的整个语言数组。判定「认出来的文字像不像我们递交的语言」
+    /// 要用整个数组，不能只看首项。首项由 `usedLanguageCode` 取。
+    private var usedLanguages = ["en-US"]
+    /// 这次 OCR 实际用的语言码（数组首项）。**首位决定用哪个模型**，见 `RecognitionLanguage`。
+    private var usedLanguageCode: String { usedLanguages.first ?? "en-US" }
+    /// 设备语言解析出来的那一档。只给 `.differsFromSystem` 那条判据用。
     private var systemLanguageCode = "en-US"
 
     /// 每次发起或取消都自增。OCR 完成时对不上就说明这次结果已经过期。
@@ -59,7 +80,7 @@ final class ReaderLaunchCoordinator: ObservableObject {
     /// 两者必须来自同一个 `RecognitionLanguage.systemLanguageCode` 调用，不能各算各的。
     func updateLanguages(_ languages: [String], systemCode: String) {
         ocr.languages = languages
-        usedLanguageCode = languages.first ?? "en-US"
+        usedLanguages = languages
         systemLanguageCode = systemCode
     }
 
@@ -103,10 +124,11 @@ final class ReaderLaunchCoordinator: ObservableObject {
         fallbackImage = nil
         languageHint = nil
 
-        // 把这一档固定在发请求的这一刻，理由见 `hint(for:failed:usedCode:)`。
-        // 只快照它、不快照 `systemLanguageCode`：那一档是**设备**属性，改它要进系统设置，
+        // 把语言固定在这一刻，理由见 `hint(...)`。快照整个数组而不只是首项：
+        // 「认出来的文字像不像我们递交的语言」要把递交的那几门语言的概率加起来。
+        // 不快照 `systemLanguageCode`：那一档是**设备**属性，改它要进系统设置，
         // 而那会让 App 退到后台、这次识别早就结束了；能在这个窗口里变的只有设置页那一项。
-        let usedForThisRequest = usedLanguageCode
+        let languagesForThisRequest = usedLanguages
 
         isPreparing = true
         recognitionFailed = false
@@ -129,7 +151,10 @@ final class ReaderLaunchCoordinator: ObservableObject {
         guard token == generation else { return }
 
         recognitionFailed = failed
-        languageHint = hint(for: blocks, failed: failed, usedCode: usedForThisRequest)
+        languageHint = hint(for: blocks,
+                            failed: failed,
+                            usedLanguages: languagesForThisRequest,
+                            text: joined)
         if !failed, !joined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             text = joined
             fallbackImage = nil
@@ -142,28 +167,62 @@ final class ReaderLaunchCoordinator: ObservableObject {
         isPresenting = true
     }
 
-    /// 「识别语言可能选错了」要不要提示。**两个条件同时成立**才给：
+    /// 「识别语言可能选错了」要不要提示。两条判据，**一主一兜底**。
     ///
-    /// 1. 这次实际用的识别语言 ≠ 设备语言解析出来的那一档；
-    /// 2. 这次的结果确实弱——一个字都没认出来，**或**整批置信度都低。
+    /// **主判据（`RecognitionLanguageAudit`）**：认出来的这段文字，像不像我们递交的那门语言。
+    /// 它问的是「这次读对了吗」，与设备语言无关——所以设备是中文、设置仍是最初的
+    /// 「跟随系统」、拍的是英文药盒，它照样能判出来。**这正是它被加进来的原因**：
+    /// 原来的判据问的是「你有没有偏离设备语言」，而上面的场景里答案是「没有」，
+    /// 于是什么都提示不了。（那条判据的置信度门槛还有第二个问题，见 `looksWeak` 的文档。）
     ///
-    /// 为什么非要第 2 条：手动选一门外语是**故意的**。一个在德语设备上拍中文药盒的人，
-    /// 正是主动去选了中文——少了第 2 条，他每次识别成功都会被念一句「可能识别不佳」，
-    /// 而他做对了。提示要给的是「认不出来」这个事实，不是「不一致」这个状态。
+    /// **兜底（`.differsFromSystem`）**：主判据在文字短于 30 字时**根本跑不了**
+    /// （见 `RecognitionLanguageAudit.minimumCharacters`），而「用户手动选了一门外语、
+    /// 结果一个块都没认出来」这种情况恰好可能落在那个区间里。所以旧这条留着，条件不变：
+    /// 用了的档 ≠ 设备语言那一档，**且**结果确实弱。
     ///
-    /// 引擎抛错时也不提示：那是 Vision 自己失败了，跟语言选得对不对无关，
+    /// 为什么旧那条当初非要「且」：手动选一门外语是**故意的**。一个在德语设备上拍中文药盒
+    /// 的人，正是主动去选了中文——少了第二个条件，他每次识别成功都会被念一句「可能识别不佳」，
+    /// 而他做对了。
+    ///
+    /// 引擎抛错时两条都不走：那是 Vision 自己失败了，跟语言选得对不对无关，
     /// 兜底文案已经在说这件事。
-    /// - Parameter usedCode: **这一次识别实际用的**那一档，由调用方在发请求那一刻取好。
-    ///   不能用 `usedLanguageCode` 这个活的值：`ocr.recognize` 在请求开始时就快照了语言
-    ///   数组，而设置页一改语言 `updateLanguages` 就会把它换掉，于是跑完的这次识别会被
-    ///   归因到**没有参与过它**的那一档上，提示里写的语言名是错的。
-    private func hint(for blocks: [RecognizedBlock], failed: Bool, usedCode: String) -> LanguageHint? {
-        guard !failed, usedCode != systemLanguageCode else { return nil }
-        guard Self.looksWeak(blocks) else { return nil }
-        return LanguageHint(usedCode: usedCode, systemCode: systemLanguageCode)
+    ///
+    /// - Parameters:
+    ///   - usedLanguages: **这一次识别实际递交的**语言数组，由调用方在发请求那一刻取好。
+    ///     不能用 `usedLanguages` 这个活的值：`ocr.recognize` 在请求开始时就快照了语言
+    ///     数组，而设置页一改语言 `updateLanguages` 就会把它换掉，于是跑完的这次识别会被
+    ///     归因到**没有参与过它**的那一档上，提示里写的语言名是错的。
+    ///   - text: 这次认出来的全部文字，交给 `RecognitionLanguageAudit` 判语言。
+    private func hint(for blocks: [RecognizedBlock],
+                      failed: Bool,
+                      usedLanguages: [String],
+                      text: String) -> LanguageHint? {
+        guard !failed else { return nil }
+        let usedCode = usedLanguages.first ?? "en-US"
+
+        // 主判据。它在文字太短时自己返回 nil，不会误判。
+        if let verdict = RecognitionLanguageAudit.audit(askedCodes: usedLanguages,
+                                                         recognizedText: text,
+                                                         supported: OCRSupportedLanguageCodes.all) {
+            return LanguageHint(usedCode: usedCode,
+                                reason: .textLooksLike(suggestedCode: verdict.suggestedCode))
+        }
+
+        // 兜底。与主判据互斥：主判据已经判过且没判出来（或判不了）才轮到它。
+        guard usedCode != systemLanguageCode, Self.looksWeak(blocks) else { return nil }
+        return LanguageHint(usedCode: usedCode, reason: .differsFromSystem(systemCode: systemLanguageCode))
     }
 
     /// 这次识别是不是整体不可信。
+    ///
+    /// ⚠️ **它现在只是兜底，不是主要判据**（见 `hint(for:failed:usedLanguages:text:)`）。
+    /// 真机上量到它在一个真实场景里**完全失灵**：中文设备拍英文药盒，中文模型把
+    /// `Oral.` 认成 `Oral,`、把半角括号认成全角，输出是半对的，而它给这些**错的**块打的分
+    /// 是 **0.500** —— 门槛写的是 `< 0.5`，严格小于，恰好不算低。整批平均 0.700、
+    /// 低置信度占比 0%，两个条件一个都不满足。反方向也不可靠：中文图上**正确**的
+    /// 「不良反应」只有 0.300，是整批最低的。**置信度在这件事上两头都没有分辨力。**
+    ///
+    /// 保留它是因为**字数少的时候新判据跑不了**，而那种情况下它是唯一的信号。
     ///
     /// 阈值是**实测标定**的，样本是 `tools/ocr-bench` 的两张合成图 × 3 种语言：
     ///

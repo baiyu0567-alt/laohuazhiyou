@@ -92,7 +92,10 @@ enum L10n {
     /// 设置页的 ❗ 说明，只在「实际用的 ≠ 系统语言那一档」时显示。
     static var ocrLanguageWarning: String { NSLocalizedString("ocr_language_warning", comment: "") }
 
-    /// 阅读页的提示：「识别语言可能选错了」。标题 + 正文，正文带两个 `%@`（实际用的、系统语言）。
+    /// 阅读页的提示：「识别语言可能选错了」。标题两种理由共用，正文各一条。
+    /// 两条正文都带两个 `%@`，但**第二个的含义不同**：一条是「系统语言」，
+    /// 一条是「建议改用的语言」。见 `LanguageHint.Reason`。
     static var ocrHintLanguageTitle: String { NSLocalizedString("ocr_hint_language_title", comment: "") }
     static var ocrHintLanguageBody: String { NSLocalizedString("ocr_hint_language_body", comment: "") }
+    static var ocrHintLanguageLooksLike: String { NSLocalizedString("ocr_hint_language_looks_like", comment: "") }
 }

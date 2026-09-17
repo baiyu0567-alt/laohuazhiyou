@@ -89,9 +89,9 @@ PresbyFriend 的 iOS 版用 Vision 做图片 OCR。它的失败模式很隐蔽�
 ./bin/langcheck
 ```
 
-不需要图片。它把 `RecognitionLanguage.swift` 的生产代码原文件直接编进来（见 `build.sh`），
-共 150 条断言，覆盖七组规则。**「本机 Vision 支持清单」以参数注入**，用的是真机实测的
-33 种那份固定清单，所以这套断言不依赖跑它的机器。
+不需要图片。它把 `RecognitionLanguage.swift` 与 `RecognitionLanguageAudit.swift` 的生产代码
+原文件直接编进来（见 `build.sh`），共 176 条断言，覆盖八组规则。**「本机 Vision 支持清单」
+以参数注入**，用的是真机实测的 33 种那份固定清单，所以这套断言不依赖跑它的机器。
 
 1. **设备语言 → Vision 码 `systemLanguageCode`**：`de-AT` → `de-DE`、裸 `ja` → `ja-JP`、
    大小写不敏感；中文/粤语**按文字分档**——**显式的 `-Hans`/`-Hant` 子标签压过地区**

@@ -359,9 +359,9 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(L10n.ocrHintLanguageTitle)
                 .font(.headline)
-            Text(String(format: L10n.ocrHintLanguageBody,
-                        RecognitionLanguage.displayName(for: hint.usedCode),
-                        RecognitionLanguage.displayName(for: hint.systemCode)))
+            // 正文和 `ReaderView` 那张卡片是同一份（`languageHintBody`）。两张卡片
+            // 只有底色/版式不同，说法必须一致——见那个函数的文件头。
+            Text(languageHintBody(hint))
                 .font(.subheadline)
         }
         .multilineTextAlignment(.leading)

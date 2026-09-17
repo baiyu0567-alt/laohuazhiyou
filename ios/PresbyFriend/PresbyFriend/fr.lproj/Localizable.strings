@@ -25,6 +25,7 @@
 "ocr_fail" = "Impossible de lire le texte de cette image";
 "ocr_hint_language_title" = "Langue de reconnaissance peut-être incorrecte";
 "ocr_hint_language_body" = "Reconnu en %1$@, mais la langue de votre système est %2$@. Si le texte n'est pas en %1$@, changez la langue de reconnaissance dans les réglages.";
+"ocr_hint_language_looks_like" = "Reconnu en %1$@, mais le texte semble être en %2$@. Changez la langue de reconnaissance dans les réglages pour %2$@.";
 "ocr_language" = "Langue de reconnaissance";
 "ocr_language_current" = "Utilisée actuellement";
 "ocr_language_desc" = "Choisissez la langue du texte photographié, pas celle de l'interface. Un mauvais choix fait échouer la reconnaissance en silence.";

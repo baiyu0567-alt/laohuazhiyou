@@ -20,11 +20,13 @@ for tool in gen-image ocr compare cold; do
 done
 
 # langcheck 测的是 App 的生产代码，不复制、不镜像 —— 直接编原文件。
-# RecognitionLanguage.swift 刻意只 import Foundation，就是为了能这样独立编译。
+# RecognitionLanguage.swift 刻意只 import Foundation、RecognitionLanguageAudit.swift 只多一个
+# NaturalLanguage，就是为了能这样独立编译（两者都不碰 Vision / L10n / UI 类型）。
 printf '  编译 langcheck\n'
 ln -sf ../langcheck.swift bin/main.swift
 swiftc -O -o bin/langcheck bin/main.swift \
-    ../../ios/PresbyFriend/PresbyFriend/Core/OCR/RecognitionLanguage.swift
+    ../../ios/PresbyFriend/PresbyFriend/Core/OCR/RecognitionLanguage.swift \
+    ../../ios/PresbyFriend/PresbyFriend/Core/OCR/RecognitionLanguageAudit.swift
 
 # ordercheck 测的同样是生产代码：`TextRecognitionService.blocks(from:)` 这个比较器。
 # 它没法和上面几个一样编成 macOS 可执行 —— 比较器的输入类型是

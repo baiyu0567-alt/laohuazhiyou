@@ -133,9 +133,10 @@ struct ReaderView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(L10n.ocrHintLanguageTitle)
                 .font(.system(size: max(20, vm.fontSize * 0.6), weight: .semibold))
-            Text(String(format: L10n.ocrHintLanguageBody,
-                        RecognitionLanguage.displayName(for: hint.usedCode),
-                        RecognitionLanguage.displayName(for: hint.systemCode)))
+            // 两种理由说的是两件事，所以取两条不同的文案——都带两个语言名，
+            // 但第二个名是「系统语言」还是「建议改用的语言」完全不同。
+            // 分派在 `languageHintBody` 里，两张卡片共用那一份，不在这里重写。
+            Text(languageHintBody(hint))
                 .font(.system(size: max(18, vm.fontSize * 0.5)))
         }
         .foregroundColor(vm.theme.textColor)
