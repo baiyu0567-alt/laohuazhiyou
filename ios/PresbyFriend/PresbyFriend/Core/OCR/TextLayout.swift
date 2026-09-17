@@ -17,6 +17,16 @@ struct TextLine: Equatable {
 
     var maxX: Double { minX + width }
     var bottom: Double { top + height }
+
+    /// 观测盒的竖直中点。
+    ///
+    /// **排序和量行距都用它，不用 `top`**，理由是同一条（推导见 `readingOrder`）：
+    /// 页面倾斜时观测盒被撑高成 `真行高 + |斜率| × 盒宽`，`top` 于是落在**线的一端**
+    /// ——右倾的页面上是右端。`top` 之差里因此掺进 `|斜率| × 两端横向距离`，
+    /// 两行宽度不一样时这一项不为零，量级和行距本身相当（真机那张照片实测 0.027
+    /// 对行距 0.031）；宽窄两行的 `top` 之间不可比。中点落在盒的**水平中点**上，
+    /// 横向距离的变化因此少一半，是被撑高的盒子上最接近「同一横坐标」的那个量。
+    var center: Double { top + height / 2 }
 }
 
 /// 把 Vision 吐出来的**视觉行**，还原成**段落**。
@@ -38,14 +48,18 @@ struct TextLine: Equatable {
 /// 两栏**恰好等高**时兜底是对的，但真实照片上左右两栏的行未必落在同一个 y 上，
 /// 差一点就会**逐行交错**——左栏第一行、右栏第一行、左栏第二行……读出来是词串。
 ///
-/// ## 它做的四件事
+/// ## 它做的六件事
 ///
 /// 1. **剔页边**（`pageBody`）：对开页的照片会把**邻页**边缘的一列字带进来，先整页剔掉。
 ///    排在最前，因为它的判据是**整页**的统计量，越往下切越不成立。
 /// 2. **分块**（`blocks`）：先按横跨栏缝的**通栏行**把页面切成上下**区带**，再在每个
 ///    区带里认出竖排的栏，最后给各块排阅读顺序。得到的是「标题 → 左栏 → 右栏」。
-/// 3. **排序**（`readingOrder`）：栏内自上而下。
-/// 4. **成段**（`paragraphsInBlock`）：把同一段折出来的若干行接成一句，段与段之间断开。
+/// 3. **拼行**（`visualLines`）：Vision 会在一行中间断开，把一行切成好几段观测，
+///    按横向接续把它们拼回**视觉行**。排在排序之前，因为排序的判据在碎片上根本不成立。
+/// 4. **排序**（`readingOrder`）：栏内自上而下；拼过行之后由 `visualLines` 自己排。
+/// 5. **成段**（`paragraphsInBlock`）：把同一段折出来的若干行接成一句，段与段之间断开。
+/// 6. **接跨栏句**（`columnFlow`）：一句话从左栏底折到右栏顶时，段落要跨过栏缝接回来
+///    ——第 5 步是**按块**各自成段的，接缝落在块与块之间，只有在这一层才看得见。
 ///
 /// ## 阈值全部是**相对的**
 ///
@@ -66,13 +80,81 @@ enum TextLayout {
 
     /// 视觉行 → 段落。这是这一层的唯一出口。
     ///
-    /// 三步依次是：**剔页边**（`pageBody`）→ **分块**（`blocks`）→ **成段**
-    /// （`paragraphsInBlock`）。
+    /// 四步依次是：**剔页边**（`pageBody`）→ **分块**（`blocks`）→ **成段**
+    /// （`paragraphsInBlock`）→ **接跨栏句**（`columnFlow`）。
     ///
     /// 页边剔除排在最先，因为它是**整页**的判断，用的是整页的统计量；一旦进了
     /// `blocks` 的递归，手上只剩一小撮行，那时算出来的「正文边缘」已经不是同一个意思了。
+    ///
+    /// 接跨栏句只能排在最后：它要的是**成好段之后**的结果——「上一段是不是写完了」
+    /// 这个问题问的是段文本，不是行几何。
     static func paragraphs(from lines: [TextLine]) -> [String] {
-        blocks(in: pageBody(in: lines)).flatMap(paragraphsInBlock)
+        let units = blocks(in: pageBody(in: lines))
+        var paragraphs: [String] = []
+        for (index, unit) in units.enumerated() {
+            let own = paragraphsInBlock(unit)
+            guard !own.isEmpty else { continue }
+            // 左栏的最后一行写到栏底还没写完 → 右栏顶上那一句是它的下半句。
+            // 拼的是**文字**：`paragraphsInBlock` 已经各自成过段，这里只把接缝接上。
+            if index > 0, let tail = paragraphs.last,
+               columnFlow(from: units[index - 1], to: unit) {
+                paragraphs[paragraphs.count - 1] = tail
+                    + joinSeparator(after: tail, before: own[0]) + own[0]
+                paragraphs += own.dropFirst()
+            } else {
+                paragraphs += own
+            }
+        }
+        return paragraphs
+    }
+
+    // MARK: - 接跨栏句
+
+    /// 左边那一块的最后一行**写到了栏底却没写完**，于是右边那块顶上接着写——
+    /// 两块是同一条文字流，接缝处不该断段。
+    ///
+    /// 判据三条，缺一不可：
+    ///
+    /// 1. **并排**：左块的右边界不越过右块的左边界。上下相邻的两块横向是**重叠**的
+    ///    （行有长有短，但都从左边界起），这条把它们排除掉。
+    /// 2. **两块都是多行的栏**。单行的块是标题一类的东西，不参与接续——真机那张照片上
+    ///    「速写传统」单行成块，上边缘又与导语那一块叠着，只靠第 1 条分不开。
+    /// 3. **左块最后一行写满了、并且没有句末标点**。一句话折到下一栏时，上一栏的最后
+    ///    一行必然是满行，且停在半句上（真机那张照片上是「……他对来家中对」和
+    ///    「……不断创造而累积形」）。短行、或以「。」结尾的行，都说明这一段在这里写完了。
+    ///
+    /// **已知边界**：判据 3 是「写没写完」的**间接**证据，不是证明。左右两栏各是一篇
+    /// 独立文章（报纸那种）而无栏底又恰好写满、又不以句号收尾时，这里会多接一句。
+    /// 手上只有几何，没有比这更强的证据；宁可错接（读起来是多了一处断句）也不漏接
+    /// （读起来是半句被切成两段）。
+    static func columnFlow(from left: [TextLine], to right: [TextLine]) -> Bool {
+        guard let leftRight = left.map(\.maxX).max(),
+              let rightLeft = right.map(\.minX).min(),
+              leftRight <= rightLeft else { return false }
+
+        let leftLines = visualLines(in: left).compactMap(mergedLine)
+        let rightLines = visualLines(in: right).compactMap(mergedLine)
+        guard leftLines.count > 1, rightLines.count > 1 else { return false }
+
+        guard let last = leftLines.last, !endsSentence(last.text) else { return false }
+
+        let typicalRightEdge = Metrics(of: leftLines).typicalRightEdge
+        return typicalRightEdge > 0
+            && last.maxX >= typicalRightEdge * shortLineFraction
+    }
+
+    /// 行尾是不是一句话说完了：最后一个**非收尾符号**的字符是句末标点。
+    ///
+    /// 收尾符号（引号、书名号、括号）要跳过：「……找俏头。”」那句话是说完的，
+    /// 但最后一个字符是引号。逗号、顿号、分号**不算**——以它们结尾的行明摆着还有下文。
+    private static func endsSentence(_ text: String) -> Bool {
+        let closers: Set<Character> = ["”", "’", "」", "』", "》", "）", ")", "\"", "'"]
+        let finals: Set<Character> = ["。", "！", "？", "…", "!", "?"]
+        for character in text.reversed() {
+            if closers.contains(character) { continue }
+            return finals.contains(character)
+        }
+        return false
     }
 
     // MARK: - 页边剔除
@@ -407,19 +489,138 @@ enum TextLayout {
     /// 的顺序承担，见那里。
     static func readingOrder(_ lines: [TextLine]) -> [TextLine] {
         lines.sorted { a, b in
-            let centerA = a.top + a.height / 2
-            let centerB = b.top + b.height / 2
-            if centerA != centerB { return centerA < centerB }
+            if a.center != b.center { return a.center < b.center }
             if a.bottom != b.bottom { return a.bottom < b.bottom }
             return a.minX < b.minX
         }
     }
 
+    // MARK: - 拼行（碎片 → 视觉行）
+
+    /// 一栏之内的碎片拼回**视觉行**，行与行按阅读顺序排好，行内按横坐标排好。
+    ///
+    /// **为什么必须有这一步。** Vision 给的观测是视觉行，但它**会在一行中间断开**——
+    /// 引号、书名号、标点处最容易断。真机那张照片右栏连着两行被切成八段（`minX` / `top` 实测）：
+    ///
+    /// | 真行 | 碎片 | `minX` | `top` |
+    /// |---|---|---|---|
+    /// | `…四音五声，行` | `腔中善` | 0.5465 | 0.3866 |
+    /// | | `用“立音”` | 0.6066 | 0.3881 |
+    /// | | `，妙用“数音”` | 0.6935 | 0.3920 |
+    /// | | `，创有“绷` | 0.7791 | 0.4070 |
+    /// | `音”。余叔岩正是以“避短”至“扬` | `音”` | 0.5484 | 0.4127 |
+    /// | | `。` | 0.5775 | 0.4215 |
+    /// | | `余` | 0.6066 | 0.4172 |
+    /// | | `叔岩正是以…` | 0.6238 | 0.4100 |
+    ///
+    /// 按纵向排（`readingOrder`）出来是 `腔中善` `用“立音”` `，妙用“数音”` `，创有“绷`
+    /// `音”` `余` `。` `叔岩…`——**`余` 和 `。` 调了个个儿**，读出来是「…绷音”余。叔岩…」。
+    /// 更糟的是每个碎片各自成一行，`startsNewParagraph` 逐段判下去，**一句话裂成六段**。
+    ///
+    /// **判据是横向接续，不是纵向位置。** 同一视觉行的两段，右边那段从左边那段**末尾**
+    /// 起笔，横坐标挨着；不同行的两段之间隔着一次换行，右边那段的 `minX` 回到栏的左边界，
+    /// 与上一行末尾差着大半个栏宽。所以先按 `minX` 排，再一段一段往已有的行上接：
+    /// 接得上就是同一行，接不上就新起一行。**两条都要满足**：
+    ///
+    /// - **横向够近**（`fragmentGapFraction`）：接续段的起点落在上一段末尾附近。
+    /// - **纵向有重叠**（`fragmentOverlapFraction`）：同一视觉行的两段在竖直方向叠着。
+    ///
+    /// 纵向这条防**误并**：上一行是短行时会提前换行，它的末尾可能恰好落在下一行**缩进后**
+    /// 的起点旁边，光看横向就并错了。横向这条防**漏并**：页面倾斜时轴对齐的观测盒被撑高
+    /// （`盒高 = 真行高 + |斜率| × 盒宽`），满宽的相邻两行也叠着（实测右栏 L2/L3 叠了 69%），
+    /// 只看纵向同样会并错。两条各自都不够，合起来才够——**这不是「多一条更保险」，
+    /// 是缺任何一条都有实测反例。**
+    ///
+    /// **行的顺序按「最左边那一段的 `top`」排，这是整页倾斜下唯一站得住的纵向判据。**
+    /// 倾斜把 `top` 撑成 `行基线 + 斜率 × minX`（见 `readingOrder`），横向位置不同的两段
+    /// 因此不可比；而**一栏里每行的最左段都落在同一个左边界上**，横向位置相同，那一项
+    /// 是同一个常量，相减就抵掉了，量到的差就是真行距。用中点、用 `bottom`、用外接矩形
+    /// 都会把这一项带进来，八段碎片上就是这么排错的。
+    ///
+    /// ⚠️ 这一条不是严格的：**段首缩进的行**最左段缩进了几个字，横向位置与别行差一个缩进，
+    /// 于是 `top` 里带上 `斜率 × 缩进`。真机那张照片右栏斜率约 0.155、缩进约 0.036，
+    /// 误差 0.006，是行距 0.024 的两成——**不足以让相邻两行换位**（相邻两行差一整个行距），
+    /// 但别拿它去判「行距是否均匀」。
+    static func visualLines(in block: [TextLine]) -> [[TextLine]] {
+        guard block.count > 1 else { return block.isEmpty ? [] : [block] }
+        // **块内还分得出栏，说明这一块不是「一栏」。** `blocks` 只有两条路会走到这里：
+        // 栏数超过 `columnLimit`，或整页塌成一块。那时候横向接续说明不了任何事——
+        // 真栏缝只有 0.4% 宽，左栏末尾到右栏行首的横向距离小得能过接续判据，
+        // 两栏会当场并成一行。退回**一段一行**，也就是这一步之前的排法。
+        guard verticalGutters(in: block).isEmpty else {
+            return readingOrder(block).map { [$0] }
+        }
+
+        let pieces = block.sorted { a, b in
+            if a.minX != b.minX { return a.minX < b.minX }
+            return a.top + a.height / 2 < b.top + b.height / 2
+        }
+
+        var lines: [[TextLine]] = []
+        for piece in pieces {
+            // 可能不止一行接得上（不同行在竖直方向叠着时会有多条候选），
+            // 取**末尾最靠右**的那条：那才是紧挨着这一段的上一段。
+            let candidates = lines.indices.filter { continues(piece, lines[$0]) }
+            if let nearest = candidates.max(by: { rightEdge(lines[$0]) < rightEdge(lines[$1]) }) {
+                lines[nearest].append(piece)
+            } else {
+                lines.append([piece])
+            }
+        }
+
+        return lines.sorted { anchorTop($0) < anchorTop($1) }
+    }
+
+    /// 一串碎片拼成的一行。
+    ///
+    /// 文字按 `joinSeparator`（中中之间不加空格）接起来。盒子取**最左边那一段**的
+    /// `top` 与 `height`，不取整行的外接矩形：倾斜会把外接矩形撑成
+    /// `真行高 + |斜率| × 整行宽`（真机那张照片右栏满宽行是 0.058，真行高只有 0.019），
+    /// 而 `startsNewParagraph` 的间距判据正是拿行高当基准的，撑出来的那一项会当场把它废掉。
+    /// 最左那一段最短，被撑出来的那一项最小；更要紧的是**每行都取同一位置的那一段**，
+    /// 行与行之间这才可比。
+    static func mergedLine(_ fragments: [TextLine]) -> TextLine? {
+        guard let first = fragments.first else { return nil }
+        let text = fragments.dropFirst().reduce(first.text) {
+            $0 + joinSeparator(after: $0, before: $1.text) + $1.text
+        }
+        return TextLine(text: text,
+                        minX: first.minX,
+                        top: first.top,
+                        width: max(rightEdge(fragments) - first.minX, 0),
+                        height: first.height)
+    }
+
+    /// 一行的**起笔端**的 `top`——就是最左边那一段的上边缘。行内已按 `minX` 排过，
+    /// 所以是第一段。整行的纵向判据都用它，理由见 `visualLines`。
+    private static func anchorTop(_ line: [TextLine]) -> Double {
+        line.first?.top ?? 0
+    }
+
+    private static func rightEdge(_ line: [TextLine]) -> Double {
+        line.map(\.maxX).max() ?? 0
+    }
+
+    /// `piece` 是不是紧接着 `line` 的末尾写的。见 `visualLines` 的推导。
+    private static func continues(_ piece: TextLine, _ line: [TextLine]) -> Bool {
+        guard let first = line.first else { return false }
+        let gap = piece.minX - rightEdge(line)
+        guard abs(gap) <= TextLayout.fragmentGapFraction else { return false }
+        let overlap = min(piece.bottom, line.map(\.bottom).max() ?? 0)
+            - max(piece.top, first.top)
+        let shorter = min(piece.height, line.map(\.height).max() ?? 0)
+        return overlap > shorter * TextLayout.fragmentOverlapFraction
+    }
+
     // MARK: - 成段
 
     /// 一个阅读单元（一栏，或一条通栏行）之内的行 → 段落。
+    ///
+    /// 先**拼行**（`visualLines`），把 Vision 切碎的视觉行还原回整行，再判段。
+    /// 顺序不能反：`startsNewParagraph` 的每一条判据（间距、缩进、短行、横向错开）
+    /// 都以「这两行是上下相邻的两个视觉行」为前提，碎片不满足这个前提。
     static func paragraphsInBlock(_ lines: [TextLine]) -> [String] {
-        let ordered = readingOrder(lines)
+        let ordered = visualLines(in: lines).compactMap(mergedLine)
         guard !ordered.isEmpty else { return [] }
 
         let metrics = Metrics(of: ordered)
@@ -461,8 +662,50 @@ enum TextLayout {
 
     /// 判段依据全部取自**这一页自己的**统计量，没有任何跨页面的绝对值。
     struct Metrics {
-        /// 相邻两行之间的正常间距（本页中位数）。段间距要跟它比。
+        /// 相邻两行之间的正常**空白**（本页中位数）：上一行的 `bottom` 到下一行的 `top`。
+        ///
+        /// ⚠️ **只在盒子不互相穿插时才有意义**，所以用它的那条判据挂了 `normalGap > 0` 的闸。
+        /// 斜页上一行的盒高是 `真行高 + |斜率| × 盒宽`（见 `visualLines`），行距小于盒高时
+        /// 盒子就穿插，「空白」量出来是**负数**。真机那张照片右栏量到 **−0.019**——
+        /// 那时候阈值被拉到比负间距还负的地方，**每一个正的间距都被判成段间距**，
+        /// 实测把「…创有“绷」和「音”。余叔岩…」——同一段的两行——拆开了。
+        ///
+        /// 这条判据本身没写错，错的是拿它去量穿插的盒子：**两个盒子都不留缝的时候，
+        /// 「缝有多宽」这个问题本身就不成立。** 那时候改用 `normalPitch`。
         let normalGap: Double
+
+        /// 相邻两行之间的正常行距（本页中位数）：两个**盒中点**之差。
+        ///
+        /// 这是斜页上唯一站得住的纵向判据：它不掺盒高，所以盒子穿插与否都不影响。
+        ///
+        /// **中点，不是 `top`。** 这一条曾经用 `top` 之差，理由是「起笔端都落在栏的
+        /// 左边界上，`top` 里的 `斜率 × minX` 是同一个常量」。**那句话是错的**——
+        /// `top` 量的是**盒最高处**，而右倾的页面上最高处在**线的右端**，不在左端。
+        /// 于是 `top` 之差里掺进 `|斜率| × 两端右端点的横向距离`，两行**宽度不一样**时
+        /// 这一项不为零。真机那张照片上把这个式子算出来是 0.027，而那一栏的行距是 0.031
+        /// ——**量出来的「行距」翻了一倍还多**，`startsNewParagraph` 第 1 条因此把
+        /// 「……流派守正」和「创新的核心要义。」（同一段折出来的两行）判成了两段。
+        ///
+        /// 中点落在盒的**水平中点**上，横向位置的变化少一半（实测残差 0.014），
+        /// 再被第 1 条那个随倾斜一起变大的 `行高` 项盖住，就够了。
+        ///
+        /// **代价**：字号不一致的页面（说明书那种「大标题 + 小正文」）里，行距本身随字号变，
+        /// 拿行距当中位数就分不清「这一行字号大」和「这一行前面有空档」。所以这一条
+        /// **不单独用**，它和 `normalGap` 那条并存——空白量得出来时以空白为准，
+        /// 量不出来（穿插）时以这条为准。
+        let normalPitch: Double
+        /// 本页行高的中位数，用来量「间距比正常多出多少」。
+        ///
+        /// **不拿这一行自己的 `height` 当基准。** 拼行之后每行的盒子是**起笔端那一段
+        /// 碎片**的盒子（`mergedLine`），斜页上它等于 `真行高 + |斜率| × 那一段的宽`
+        /// ——一行里恰好只被切成一小段时，盒子就特别矮，阈值跟着塌到 `normalPitch` 上，
+        /// 任何抖动都够触发。真机那张照片的右栏就是这么把一整段切成三段的：第 2 行
+        /// （「时习之’，但到台上，我」）的盒子只有 **0.0160** 高，而本页中位高是
+        /// **0.0445**，阈值于是从 0.041 掉到 0.031，而那一对的间距是 0.036——本来不该断。
+        ///
+        /// 取本页中位数，阈值就与「这一行恰好被切成一小段」无关了。这也正是这个文件里
+        /// 「阈值全部是相对的」那一条该有的样子：基准是**本页**的，不是这一行的。
+        let typicalHeight: Double
         /// 本页平均字宽，用来把「缩进」换算成「缩进几个字」。
         let characterWidth: Double
         /// 正文行的典型右边界，用来判断某一行是不是「短行」。
@@ -471,6 +714,11 @@ enum TextLayout {
         init(of ordered: [TextLine]) {
             let gaps = (1..<ordered.count).map { ordered[$0].top - ordered[$0 - 1].bottom }
             normalGap = Metrics.median(gaps) ?? 0
+
+            let pitches = (1..<ordered.count).map { ordered[$0].center - ordered[$0 - 1].center }
+            normalPitch = Metrics.median(pitches) ?? 0
+
+            typicalHeight = Metrics.median(ordered.map(\.height)) ?? 0
 
             let widths = ordered.map { line -> Double in
                 let count = Double(max(line.text.count, 1))
@@ -493,15 +741,33 @@ enum TextLayout {
         ///    所以标题不会被误判成段尾。
         /// 4. **横向完全不相交**——两行左右错开、一个字都不重叠，那它们不是上下相邻的两行。
         func startsNewParagraph(upper: TextLine, lower: TextLine) -> Bool {
-            // **要求间距为正。** 上下两行的包围盒**叠在一起**时（`gap <= 0`），
-            // 「空档比正常行距大」这句话本身就没有意义——可它照样成立：真机那张照片上
-            // `normalGap` 量出来是 **-0.019**（同一视觉行被 Vision 切成几块，各块高度
-            // 不一，底边互相穿插），阈值于是成了 -0.019 + 0.35×行高 ≈ 0，
-            // **每一个负间距都被判成段间距**。实测这一段就让「…累积形」与
-            // 「成的，是…」——同一段的两行——被拆开。叠着的两行之间没有空档，
-            // 就不可能隔着段间距：这是恒等式，不是阈值。
+            // **两条由远及近的信号，任一成立即断开。** 两条的超出量都拿**本页行高**
+            // （`typicalHeight`）当基准，不拿间距当基数——`heightFactor` 那里记着为什么；
+            // 也不拿**这一行自己的** `height`——`typicalHeight` 那里记着为什么。
+            //
+            // 1. **两行中点之间的距离明显大于本页正常行距。** 斜页上唯一站得住的纵向判据，
+            //    不掺盒高，盒子穿插与否都成立。**代价是分不清「这一行字号大」和
+            //    「这一行前面有空档」**，所以它只负责「明显偏离」这一档。
+            //    用中点不用 `top`：`top` 落在倾斜盒子的右端，量的是「两端横向距离」而不是
+            //    行距（推导与实测见 `normalPitch`）。
+            // 2. **两行之间的空白明显大于本页正常空白。** 更贴近「段间距」的本义，
+            //    但**要求 `normalGap > 0`**：盒子互相穿插时「缝有多宽」不成立
+            //    （见 `normalGap` 的推导），拿负数当基准会把每个正间距都判成段间距。
+            //
+            // 分开写而不是合成一条，是因为两者的适用面是**互补**的：真机那张照片是两个
+            // 极端——斜到盒子全穿插，只有第 1 条能用；`paracheck` 那张说明书的图是全正立，
+            // 空白量得准，但标题字号比正文大、行距跟着大，只有第 2 条分得开
+            // （实测段间距处的空档 0.039–0.043，普通行距 0.020–0.025，而两条的行距
+            // 只差 0.010，第 1 条在那一页上判不出来）。
+            let pitch = lower.center - upper.center
+            if pitch > normalPitch + typicalHeight * TextLayout.heightFactor {
+                return true
+            }
+            // 空白是**上一行的底边到这一行的上边**，两个量各自取自己的盒边，
+            // 不能用 `pitch - upper.height` 去凑——`pitch` 现在量的是中点之差。
             let gap = lower.top - upper.bottom
-            if gap > 0, gap > normalGap + upper.height * TextLayout.heightFactor {
+            if normalGap > 0,
+               gap > normalGap + typicalHeight * TextLayout.heightFactor {
                 return true
             }
 
@@ -609,6 +875,30 @@ enum TextLayout {
     /// 而上下两块（比如标题与它下面的正文）重叠通常为 0。
     static let rowOverlapFraction = 0.5
 
+    /// 同一视觉行的两段碎片，接续段的起点离上一段末尾最远这么多（横向，占整页宽的比例）。
+    ///
+    /// 一行的字是连着排的，横坐标上两段之间只隔着一个接缝，量级是**零**——真机那张照片
+    /// 上八段碎片的接缝实测在 −0.0098 到 +0.0097 之间（负数=包围盒略微叠着）。
+    /// 定 0.02 是**一个字的量级**（那张照片右栏字宽 0.018），留出识别把接缝撑开一点、
+    /// 或原文里夹了一个空格（`用了“数音”， 创有` 这种）的余地。
+    ///
+    /// **上限卡的是换行**：一栏内换行后 `minX` 回到左边界，与上一行末尾差着大半个栏宽
+    /// （那张照片上是 0.31），离 0.02 差一个数量级，所以这一条几乎不会误判。
+    /// **下限卡的是「同一段文字不该左右叠着」**：横坐标上倒退超过一个字，说明这一段
+    /// 不属于这一行，而是左边另一行伸过来的。
+    static let fragmentGapFraction = 0.02
+
+    /// 两段碎片竖直方向重叠超过**较矮那一段**的这个比例，才算同一视觉行。
+    ///
+    /// 与 `rowOverlapFraction` 同一个意思，只是量在**碎片**而不是块上，分开取是因为
+    /// 两者的实测分布不同：同行的两段叠得很深（真机那张照片八段碎片实测 57%–116%），
+    /// 取 0.4 给最浅的那一对（`音”` 对 `。`，57%）留出余量。
+    ///
+    /// **不能只靠这一条**：页面倾斜时满宽的相邻两行也叠到 69%，光看它会并错。
+    /// 也不能只看横向：上一行是短行时会提前换行，末尾可能恰好落在下一行缩进后的起点旁。
+    /// 两条一起才够，见 `visualLines`。
+    static let fragmentOverlapFraction = 0.4
+
     /// 段间距要比正常行距**再多出「行高的这么多倍」**，才算段落断开。
     ///
     /// **基准是行高，不是 `normalGap`。** 这一条是改出来的，原来写的是
@@ -622,13 +912,18 @@ enum TextLayout {
     /// - 行距松 → 阈值大得离谱 → 真正的段间距反而判不出来。
     ///
     /// 段间距的**超出量**该拿行高当基准：行高是排版里的稳定量，不随行距设置漂。
+    /// 这个「行高」取的是**本页行高的中位数**（`Metrics.typicalHeight`），不是这一行
+    /// 自己的盒子——理由见那里。
     ///
     /// 取 0.35 是**朝着不误拆的方向保守**。往下调会让它更灵敏，代价是上面第一条——
     /// 而两个方向的代价并不对称：漏判一个标题只是看起来差一点，误拆一段正文是错的。
     ///
-    /// ⚠️ **这个数没有在真实照片上标定过。** 它是在一张合成图上定的（`paracheck`
-    /// 的说明书图，实测超出量约 0.61 个行高）。真实素材请用 `tools/ocr-bench` 的
-    /// `paracheck` 打出本页统计量再判，别直接改这个数——
+    /// ⚠️ **这个数只在两张图上验过。** 一张是合成图（`paracheck` 的说明书图，实测
+    /// 超出量约 0.61 个行高）。另一张是真机那张照片的**右栏**——那里每一对相邻行
+    /// 都是同一段，倾斜项把中点顶出去最多 **0.0455**，而阈值是
+    /// `0.0291 + 0.0577 × 0.35 = 0.0493`：**再小一点就会把「创新的核心要义。」拆出去**，
+    /// 再大一点则「重新」那句真段间距就判不出来。0.35 正好落在能同时站住的窄缝里。
+    /// 真实素材请用 `tools/ocr-bench` 的 `paracheck` 打出本页统计量再判，别直接改这个数——
     /// 本项目上一轮的置信度阈值就是在合成图上标的，真机行为与标定不符，返工了两轮。
     static let heightFactor = 0.35
 
