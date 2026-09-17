@@ -100,9 +100,19 @@ for (index, paragraph) in paragraphs.enumerated() {
 
 // 顺便把「本页自己的统计量」打出来。阈值全是相对的，所以这几个数就是这套判据
 // 在这张图上的全部依据——真机行为不对时，先看这几个数是不是离谱。
-if blocks.count > 1 {
-    let metrics = TextLayout.Metrics(of: TextLayout.readingOrder(blocks.map(\.line)))
-    print("\n本页统计量（判段依据全部取自这三个数，没有任何绝对值）：")
+//
+// **必须按「块」算，不能拿整页所有行一起算。** 判段是在块内做的（`TextLayout.blocks`
+// 切出来的每一栏各自成段），而分栏之后整页的行里左右两栏是**并排**的：同一条基线上
+// 并排的两行，间距算出来是**负的**，于是「正常行距」会打出一个负数。那看着像代码坏了，
+// 其实是这个诊断算错了范围——而它恰恰是出问题时第一个要看的数，不能是错的。
+let layoutBlocks = TextLayout.blocks(in: blocks.map(\.line))
+if layoutBlocks.count > 1 {
+    print("\n（整页被切成 \(layoutBlocks.count) 块：分栏或通栏行所致，逐块列统计量）")
+}
+for (index, block) in layoutBlocks.enumerated() where block.count > 1 {
+    let metrics = TextLayout.Metrics(of: TextLayout.readingOrder(block))
+    let label = layoutBlocks.count > 1 ? "第 \(index + 1) 块" : "本页"
+    print("\n\(label)统计量（判段依据全部取自这三个数，没有任何绝对值）：")
     print(String(format: "  正常行距 normalGap      %.4f", metrics.normalGap))
     print(String(format: "  平均字宽 characterWidth %.4f", metrics.characterWidth))
     print(String(format: "  典型右界 typicalRight   %.4f", metrics.typicalRightEdge))

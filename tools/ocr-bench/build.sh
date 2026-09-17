@@ -114,11 +114,16 @@ if [ -n "$ios_booted" ]; then
     # 仍然是旧版式的结论。造两张图不到一秒，不值得为这点时间留个静默失配的坑。
     ./bin/gen-image bin single >/dev/null
     ./bin/gen-image bin wrapped >/dev/null
+    ./bin/gen-image bin two-column >/dev/null
 
-    # **两张图一起跑，缺一张这一环就不成立。** 段落重建只有两种错法：
+    # **三张图一起跑，缺一张这一环就不成立。** 段落重建有三种错法，各由一张图钉住：
     # 该断的没断（说明书图：5 个小节应各成一段，共 10 段）、
-    # 不该断的断了（折行图：一段话折五行，应**只有 1 段**）。
-    # 只跑一张，把阈值往另一边调都「通过」——单看一张图是看不出方向的。
+    # 不该断的断了（折行图：一段话折五行，应**只有 1 段**）、
+    # 分栏切错（两栏图：通栏题头 + 左右各一栏，应**恰好 3 段**，题头在前、两栏各自成段）。
+    #
+    # 第三条是**补出来的**，而且是真机报回来的那条：此前两栏图根本不存在
+    # （旧的那张只有两个标题、每栏一行，是给 ordercheck 的平局分支当人工参照的），
+    # 于是「分栏在真图上成不成立」从没被量过，缺陷一路走到用户手上。
     printf '\n运行 paracheck（端到端，模拟器 %s）\n' "$ios_booted"
     para_failed=0
     xcrun simctl spawn "$ios_booted" "$(pwd)/bin/paracheck" --expect 10 \
@@ -126,6 +131,9 @@ if [ -n "$ios_booted" ]; then
     printf '\n'
     xcrun simctl spawn "$ios_booted" "$(pwd)/bin/paracheck" --expect 1 \
         "$(pwd)/bin/test_image_wrapped.png" || para_failed=1
+    printf '\n'
+    xcrun simctl spawn "$ios_booted" "$(pwd)/bin/paracheck" --expect 3 \
+        "$(pwd)/bin/test_image_two_column.png" || para_failed=1
 
     # **必须真的退非零。** 这里原来只有一句 `printf '❌'`，没有 `exit`——于是 paracheck
     # 明明打印了「段数 6，期望 10」，build.sh 仍然一路走到最后退出 0。一条**能发现问题、

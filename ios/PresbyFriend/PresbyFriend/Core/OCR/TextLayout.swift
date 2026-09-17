@@ -40,7 +40,8 @@ struct TextLine: Equatable {
 ///
 /// ## 它做的三件事
 ///
-/// 1. **分栏**（`columns`）：先认出竖排的栏，再在每栏内部排序。
+/// 1. **分块**（`blocks`）：先认出竖排的栏，把横跨栏缝的**通栏行**（居中的大标题）
+///    单独摘出来，再给各块排阅读顺序。
 /// 2. **排序**（`readingOrder`）：栏内自上而下。
 /// 3. **成段**（`paragraphs`）：把同一段折出来的若干行接成一句，段与段之间断开。
 ///
@@ -63,59 +64,115 @@ enum TextLayout {
 
     /// 视觉行 → 段落。这是这一层的唯一出口。
     static func paragraphs(from lines: [TextLine]) -> [String] {
-        columns(lines).flatMap(paragraphsInColumn)
+        blocks(in: lines).flatMap(paragraphsInBlock)
     }
 
-    // MARK: - 分栏
+    // MARK: - 分块（分栏 + 通栏行）
 
-    /// 按竖排的栏把行分组，并保持栏与栏的左右顺序。
+    /// 把一页切成若干**阅读单元**并给出阅读顺序。单元随后各自成段。
     ///
-    /// **判据是「一条没有任何文字跨过的竖缝」。** 把所有行的横向区间求并集，
-    /// 并集内部的每一个空档就是一条候选竖缝；够宽的那条就是栏间距。
+    /// 单元有两类：**栏**（竖着一条，里面若干行）与**通栏行**（横跨栏缝的行，通常
+    /// 是居中的大标题，自成一块，不并入任何一栏）。
     ///
-    /// 为什么是并集而不是别的：单栏页面上，**缩进**（段首空两格、居中标题）会让个别行
-    /// 的区间变窄，但只要还有别的行覆盖那段 x，并集就是连续的，不会凭空长出一条竖缝。
-    /// 也就是说缩进在这条判据下**天然不产生假栏**，这正是要用并集的原因。
-    ///
-    /// 递归切分，所以三栏、四栏也走得通。栏数上限 `columnLimit` 是防病态输入用的：
-    /// 一页被切得太碎，说明这页根本不是分栏版式，那时候保序比强行分栏安全。
-    static func columns(_ lines: [TextLine]) -> [[TextLine]] {
+    /// 递归切分，所以三栏、四栏也走得通。块数上限 `columnLimit` 是防病态输入用的：
+    /// 一页被切得太碎，说明这页根本不是分栏版式，那时保序比强行分栏安全。
+    static func blocks(in lines: [TextLine]) -> [[TextLine]] {
         guard lines.count > 1 else { return lines.isEmpty ? [] : [lines] }
 
-        let gutters = verticalGutters(in: lines)
-        guard let gutter = gutters.first else { return [lines] }
+        guard let gutter = verticalGutters(in: lines).first else {
+            return [readingOrder(lines)]
+        }
 
         let left = lines.filter { $0.maxX <= gutter.start }
         let right = lines.filter { $0.minX >= gutter.end }
-        // 落在竖缝里的行说明它**跨过了**这条缝，那这页就不是这个分法——
-        // 宁可退回当单栏，也不要把它丢进错误的一栏。
-        guard left.count + right.count == lines.count else { return [lines] }
+        let spanning = lines.filter { $0.maxX > gutter.start && $0.minX < gutter.end }
 
-        let result = columns(left) + columns(right)
-        guard result.count <= columnLimit else { return [lines] }
-        return result
+        let leftBlocks = blocks(in: left)
+        let rightBlocks = blocks(in: right)
+        guard leftBlocks.count + rightBlocks.count <= columnLimit else {
+            return [readingOrder(lines)]
+        }
+
+        // 通栏行各自成块。**不并入任何一栏**：一条横跨两栏的标题和它下面的正文
+        // 不是同一段，硬塞进某一栏就会在那一栏里插进一句无关的话。
+        let spanningBlocks = spanning.sorted { $0.top < $1.top }.map { [$0] }
+        return (leftBlocks + rightBlocks + spanningBlocks).sorted(by: blockOrder)
     }
 
-    /// 并集内部的空档，从宽到窄。
+    /// 块的阅读顺序：先比上边缘，平局比左边缘。
     ///
-    /// 只保留**严格在页内**的空档（`interiorOnly`）：页面左右两侧留白不是栏间距，
-    /// 中间那条才是。宽度门槛见 `gutterMinimumWidth`。
-    static func verticalGutters(in lines: [TextLine]) -> [(start: Double, end: Double)] {
-        let spans = lines.map { ($0.minX, $0.maxX) }.sorted { $0.0 < $1.0 }
-        guard let first = spans.first, let last = spans.last else { return [] }
+    /// **比较器必须是全序，不能只写上边缘。** 真实两栏页面上左右两栏的上边缘
+    /// 几乎总是相等（并排起头），这时 `sorted(by:)` 不保证稳定，两栏顺序就会随运行
+    /// 而变——`ordercheck` 存在的全部理由就是不让人踩这一脚，这里不能再踩一次。
+    /// 左边缘各不相等，所以拿它破平局就够了。
+    static func blockOrder(_ a: [TextLine], _ b: [TextLine]) -> Bool {
+        let topA = a.map(\.top).min() ?? 0
+        let topB = b.map(\.top).min() ?? 0
+        if topA != topB { return topA < topB }
+        let leftA = a.map(\.minX).min() ?? 0
+        let leftB = b.map(\.minX).min() ?? 0
+        return leftA < leftB
+    }
 
-        var gutters: [(start: Double, end: Double)] = []
-        var reach = first.1
-        for (start, end) in spans.dropFirst() {
-            if start > reach {
-                gutters.append((reach, start))
-            }
-            reach = max(reach, end)
+    /// 页内的竖向空档（候选栏缝），最像栏缝的排在前面。
+    ///
+    /// **判据不是「并集里的零空档」。** 原先的写法取所有行横向区间的并集，再把并集
+    /// 内部的空档当候选——那要求**没有任何一行**跨过这条缝。真实说明书恰恰有一条
+    /// **居中题头**横跨栏缝，并集于是连成一片，真正的栏缝一条都找不到；反而在题头
+    /// 左边（题头够不到左栏右边缘）裂出一条**窄缝**，它被当成栏缝挑走。结果左栏自成
+    /// 一块、右栏和题头粘成另一块，**标题跑到两栏中间**。真机报回来的「左右跳」
+    /// 就是这一类：缝挑错了，顺序就全错。
+    ///
+    /// 现在按**边界区间**取候选：把所有 `minX` / `maxX` 排序，相邻两个值之间就是一个
+    /// 候选空档。有行跨过某条缝时，那条缝**依然是一个区间**，只是「跨越行数」不为零
+    /// ——这两个量随后一起用来排名。
+    ///
+    /// 三件事依次筛：
+    ///
+    /// 1. **够宽**（`gutterMinimumWidth`）、**在页内**（左右两侧的留白不是栏缝）；
+    /// 2. **跨越它的行不能太多**（`columnCrossingFraction`）——跨过栏缝的那几行是
+    ///    通栏行，一两条正常，多到几十条就说明这条缝不是栏缝；
+    /// 3. **两侧都要真的成栏**（`columnBalanceFraction`）。没有这一条，一栏里参差的
+    ///    右边界会造出假空档（某行比别的行短一截），而那种空档两侧是「一行 vs 其余
+    ///    所有行」，不是两栏。
+    ///
+    /// 排名**先比宽度，再比跨越行数**。顺序反了会挑走题头旁边那条窄缝：它跨越行数
+    /// 为 0，比真栏缝「更干净」——但真栏缝**总是更宽**，因为题头至少跨过了右栏的
+    /// 左边缘（题头左边缘必然落在右栏左边缘的左边，否则它就不算跨过栏缝）。
+    static func verticalGutters(in lines: [TextLine]) -> [(start: Double, end: Double)] {
+        let boundaries = Set(lines.flatMap { [$0.minX, $0.maxX] }).sorted()
+        guard let pageStart = boundaries.first, let pageEnd = boundaries.last,
+              boundaries.count > 1 else { return [] }
+
+        let crossingBudget = Double(lines.count) * columnCrossingFraction
+        let balanceFloor = max(2.0, Double(lines.count) * columnBalanceFraction)
+
+        var candidates: [(start: Double, end: Double, width: Double, crossings: Int)] = []
+        for (start, end) in zip(boundaries, boundaries.dropFirst()) {
+            let width = end - start
+            guard width >= gutterMinimumWidth else { continue }
+            guard start > pageStart, end < pageEnd else { continue }
+
+            let mid = (start + end) / 2
+            let crossings = lines.filter { $0.minX < mid && mid < $0.maxX }.count
+            guard Double(crossings) <= crossingBudget else { continue }
+
+            // 两侧的行数要与后面切分时用的判据**完全一致**（`maxX <= start` /
+            // `minX >= end`），否则这里算出来的平衡与切出来的两侧对不上。
+            let left = lines.filter { $0.maxX <= start }.count
+            let right = lines.filter { $0.minX >= end }.count
+            guard Double(min(left, right)) >= balanceFloor else { continue }
+
+            candidates.append((start, end, width, crossings))
         }
-        return gutters
-            .filter { $0.end - $0.start >= gutterMinimumWidth }
-            .filter { $0.start > first.0 && $0.end < last.1 }
-            .sorted { ($0.end - $0.start) > ($1.end - $1.start) }
+
+        return candidates
+            .sorted { a, b in
+                if a.width != b.width { return a.width > b.width }
+                if a.crossings != b.crossings { return a.crossings < b.crossings }
+                return a.start < b.start
+            }
+            .map { ($0.start, $0.end) }
     }
 
     /// 栏内阅读顺序：自上而下。
@@ -142,8 +199,8 @@ enum TextLayout {
 
     // MARK: - 成段
 
-    /// 一栏之内的行 → 段落。
-    static func paragraphsInColumn(_ lines: [TextLine]) -> [String] {
+    /// 一个阅读单元（一栏，或一条通栏行）之内的行 → 段落。
+    static func paragraphsInBlock(_ lines: [TextLine]) -> [String] {
         let ordered = readingOrder(lines)
         guard !ordered.isEmpty else { return [] }
 
@@ -290,10 +347,23 @@ enum TextLayout {
 
     /// 竖缝至少要有页面宽度的这个比例，才算栏间距。
     ///
-    /// 取这么小是有意的：真正的栏间距远宽于此（通常 5% 以上），而**假**竖缝的宽度上限
-    /// 是被结构压住的——缩进、居中标题都会被别的行覆盖，压根不产生并集空档。
-    /// 也就是说这条线两边都没有接近它的样本，0.02 落在空档里。
+    /// 取这么小是有意的：真正的栏间距远宽于此（通常 5% 以上）。**光靠宽度不够**
+    /// ——一栏里参差的右边界也会裂出这个量级的空档，所以另有两道筛子（见
+    /// `columnBalanceFraction` 与 `columnCrossingFraction`），宽度只负责在候选之间排名。
     static let gutterMinimumWidth = 0.02
+
+    /// 一条候选栏缝允许被多大比例的行跨过。
+    ///
+    /// 跨过栏缝的行是**通栏行**（居中的大标题），一两条很正常——真机报回来的那个
+    /// 缺陷恰恰就是「有一条通栏行，于是真正的栏缝被整个否掉」。定 0.25：真实版面上
+    /// 通栏行是少数，而单栏页面里任何一条内部空档都会被几乎所有行跨过，两者差得很远。
+    static let columnCrossingFraction = 0.25
+
+    /// 切开之后，两侧各自至少要占这个比例的行，才算「两栏」。
+    ///
+    /// 挡的是「一栏 + 一条短行」：参差的右边界会在栏内裂出假空档，而那种空档两侧是
+    /// 「一行 vs 其余所有行」。真栏缝两侧都有成栏的正文。
+    static let columnBalanceFraction = 0.2
 
     /// 一页最多认几栏。切过头说明这页不是分栏版式，那时保序比强行分栏安全。
     static let columnLimit = 4

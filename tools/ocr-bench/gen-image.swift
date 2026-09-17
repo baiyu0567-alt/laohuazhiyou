@@ -82,7 +82,14 @@ func makeTestImage(width: Int, height: Int, lines: [(String, CGFloat)]) -> CGIma
     }
 
     guard let base = ctx.makeImage() else { return nil }
+    return degraded(base)
+}
 
+/// 「手持拍摄」的那一层退化：轻微模糊 + 极轻噪声。
+///
+/// 抽出来是因为**每一张夹具都该过这一道**——两栏图原先没有，于是它比别的夹具干净，
+/// 而 `paracheck` 拿它下结论时，那个结论就比别的夹具更乐观。
+func degraded(_ base: CGImage) -> CGImage? {
     let ci = CIImage(cgImage: base)
 
     // 轻微模糊 —— 模拟手持拍摄的对焦不完美
@@ -112,41 +119,113 @@ func makeTestImage(width: Int, height: Int, lines: [(String, CGFloat)]) -> CGIma
     return cictx.createCGImage(noise, from: ci.extent) ?? base
 }
 
-// 两栏版：左右两块标题画在**同一条基线**上（同一个 y）。
-// 用来逼出 `TextRecognitionService.blocks(from:)` 里 `origin.y` 相等的那条平局分支——
-// 不按 minX 破平局，顺序就会随运行而变（`sorted(by:)` 不保证稳定）。
-// x 坐标与 ordercheck 驱动里的归一化坐标对应：60/1200 = 0.05，660/1200 = 0.55。
-func makeTwoColumnImage(width: Int, height: Int) -> CGImage? {
+// ── 两栏的两种图，用途不同，别混 ──
+
+/// 一张「说明书页」的空白画布：泛黄浅灰底 + 深灰字。
+func pageContext(width: Int, height: Int) -> CGContext? {
     let cs = CGColorSpaceCreateDeviceRGB()
     guard let ctx = CGContext(data: nil, width: width, height: height,
                               bitsPerComponent: 8, bytesPerRow: 0,
                               space: cs,
                               bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
-
     ctx.setFillColor(CGColor(red: 0.87, green: 0.86, blue: 0.82, alpha: 1))
     ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
+    return ctx
+}
 
-    let textColor = CGColor(red: 0.28, green: 0.27, blue: 0.25, alpha: 1)
+let pageTextColor = CGColor(red: 0.28, green: 0.27, blue: 0.25, alpha: 1)
 
-    let columns: [(String, CGFloat)] = [
-        ("左栏标题", 60),
-        ("右栏标题", 660),
+/// 画一行，**返回它的排版宽度**——题头要居中就得先知道宽度，不能靠估。
+@discardableResult
+func drawLine(_ text: String, size: CGFloat, x: CGFloat, baseline: CGFloat,
+              in ctx: CGContext, color: CGColor = pageTextColor) -> CGFloat {
+    let font = CTFontCreateWithName("PingFang SC" as CFString, size, nil)
+    let attr = NSAttributedString(string: text, attributes: [
+        .font: font,
+        .foregroundColor: color,
+    ])
+    let line = CTLineCreateWithAttributedString(attr)
+    ctx.textPosition = CGPoint(x: x, y: baseline)
+    CTLineDraw(line, ctx)
+    return CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
+}
+
+/// 两栏**同基线平局**的图：左右各一个标题，画在同一个 y 上。
+///
+/// 用途只有一个：给人用 `./bin/ocr` 看**真实的 Vision 会不会给出完全相等的 `origin.y`**
+/// （`ordercheck` 断言的是「**若**相等则左栏在前」这条规则，规则本身不依赖谁产生这些块）。
+/// **这不是两栏版式**——它每栏只有一行，测不了分栏。要看分栏请用下面那张。
+/// x 坐标与 ordercheck 驱动里的归一化坐标对应：60/1200 = 0.05，660/1200 = 0.55。
+func makeColumnTieImage(width: Int, height: Int) -> CGImage? {
+    guard let ctx = pageContext(width: width, height: height) else { return nil }
+    let y = CGFloat(height) / 2
+    drawLine("左栏标题", size: 26, x: 60, baseline: y, in: ctx)
+    drawLine("右栏标题", size: 26, x: 660, baseline: y, in: ctx)
+    return ctx.makeImage()
+}
+
+/// **一条通栏标题 + 左右两栏正文**——真实的说明书背面版式。
+///
+/// 这一张是补出来的，因为**旧的「两栏图」根本不是两栏版式**（见上面那张）。于是
+/// 「分栏在真图上到底成不成立」这一环，`paracheck` 从来没有量过，而真机报回来的
+/// 正是分栏失败：正文左右跳（左栏第一行、右栏第一行、左栏第二行……）。
+///
+/// **通栏标题是必需的，不是装饰。** 它横跨栏间距，把所有行的横向并集连成一片——
+/// 而「按并集空档找栏缝」正是 `TextLayout.columns` 当时的做法，于是它一条缝都找不到，
+/// 整页退回单栏，再按基线排就必然左右跳。真实说明书恰恰都有这样一条标题：
+/// **夹具里少了它，就等于绕开了唯一会出问题的那种形状。**
+func makeTwoColumnImage(width: Int, height: Int) -> CGImage? {
+    guard let ctx = pageContext(width: width, height: height) else { return nil }
+
+    // 左栏 x=60（0.05）、右栏 x=660（0.55），与 ordercheck 的合成坐标同一组数，
+    // 栏间距留在 0.40–0.55 之间。
+    let leftColumn = [
+        "口服。成人一次1片，一日3次，饭后服用。",
+        "请勿超过推荐剂量，若症状持续或加重，",
+        "请停药并咨询医师。儿童用量请遵医嘱，",
+        "孕妇及哺乳期妇女慎用。对本品任一成分",
+        "过敏者禁用。请置于儿童不能触及处。",
+    ]
+    let rightColumn = [
+        "不良反应：偶见皮疹、瘙痒、恶心、胃部",
+        "不适等，一般停药后可自行恢复。若出现",
+        "严重不良反应请立即就医。贮藏：密封，",
+        "在阴凉干燥处（不超过20℃）保存。有效",
+        "期：24个月，请于包装所示日期前使用。",
     ]
 
-    let y = CGFloat(height) / 2
-    for (text, x) in columns {
-        let font = CTFontCreateWithName("PingFang SC" as CFString, 26, nil)
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: font,
-            .foregroundColor: textColor,
-        ]
-        let attr = NSAttributedString(string: text, attributes: attrs)
-        let line = CTLineCreateWithAttributedString(attr)
-        ctx.textPosition = CGPoint(x: x, y: y)
-        CTLineDraw(line, ctx)
+    // 题头先量宽再居中——**必须真的跨过栏间距**（0.40–0.55），否则这张图测不到要测的东西。
+    let titleSize: CGFloat = 26
+    let titleText = "复方氨酚烷胺片说明书（请仔细阅读）"
+    let titleFont = CTFontCreateWithName("PingFang SC" as CFString, titleSize, nil)
+    let titleAttr = NSAttributedString(string: titleText, attributes: [
+        .font: titleFont,
+        .foregroundColor: pageTextColor,
+    ])
+    let titleWidth = CGFloat(CTLineGetTypographicBounds(
+        CTLineCreateWithAttributedString(titleAttr), nil, nil, nil))
+
+    let bodySize: CGFloat = 15
+    let bodyStep = bodySize * 2.6          // 与单栏夹具同一条行距规则
+    let titleBaseline = CGFloat(height) - 70
+    let firstBodyBaseline = titleBaseline - titleSize * 2.6
+
+    // 题头：居中
+    drawLine(titleText, size: titleSize,
+             x: (CGFloat(width) - titleWidth) / 2, baseline: titleBaseline, in: ctx)
+
+    // 两栏：同一条水平基准线起步，行距相同
+    for (index, text) in leftColumn.enumerated() {
+        drawLine(text, size: bodySize, x: 60,
+                 baseline: firstBodyBaseline - CGFloat(index) * bodyStep, in: ctx)
+    }
+    for (index, text) in rightColumn.enumerated() {
+        drawLine(text, size: bodySize, x: 660,
+                 baseline: firstBodyBaseline - CGFloat(index) * bodyStep, in: ctx)
     }
 
-    return ctx.makeImage()
+    guard let base = ctx.makeImage() else { return nil }
+    return degraded(base)
 }
 
 // ── 报告两档各自支持的语言 ──
@@ -202,8 +281,15 @@ case "two-column":
         exit(1)
     }
     img = made
+case "column-tie":
+    fileName = "test_image_column_tie.png"
+    guard let made = makeColumnTieImage(width: W, height: H) else {
+        print("❌ 测试图生成失败")
+        exit(1)
+    }
+    img = made
 default:
-    print("❌ 未知版式: \(layout)（可选 single / wrapped / two-column）")
+    print("❌ 未知版式: \(layout)（可选 single / wrapped / two-column / column-tie）")
     exit(1)
 }
 

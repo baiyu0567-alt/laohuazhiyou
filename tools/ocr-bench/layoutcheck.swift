@@ -43,7 +43,7 @@ print("\n【分栏】")
 // 单栏：所有行横向范围重叠，并集连续，不该切出任何缝。
 let single = column(["第一行正文内容", "第二行正文内容", "第三行正文内容"],
                     x: 0.10, firstTop: 0.10, step: 0.04, width: 0.80)
-expect(TextLayout.columns(single).count, 1, "单栏 → 一栏")
+expect(TextLayout.blocks(in: single).count, 1, "单栏 → 一栏")
 
 // 双栏：中间一条明显的竖缝，应切成两栏，且左栏在前。
 let twoColumnLeft = column(["左栏第一行", "左栏第二行", "左栏第三行"],
@@ -51,7 +51,7 @@ let twoColumnLeft = column(["左栏第一行", "左栏第二行", "左栏第三�
 let twoColumnRight = column(["右栏第一行", "右栏第二行", "右栏第三行"],
                             x: 0.55, firstTop: 0.10, step: 0.04, width: 0.40)
 let twoColumn = twoColumnLeft + twoColumnRight
-let splitColumns = TextLayout.columns(twoColumn)
+let splitColumns = TextLayout.blocks(in: twoColumn)
 expect(splitColumns.count, 2, "双栏 → 两栏")
 expect(splitColumns.first?.map(\.text), ["左栏第一行", "左栏第二行", "左栏第三行"],
        "双栏 → 左栏整栏在前")
@@ -71,20 +71,20 @@ let indented = [
     line("　　段首缩进的一行，比别的行短一点点", x: 0.14, top: 0.10, width: 0.76),
 ] + column(["接下来的第二行是齐头的正文", "第三行也是齐头的正文内容"],
            x: 0.10, firstTop: 0.16, step: 0.04, width: 0.80)
-expect(TextLayout.columns(indented).count, 1, "段首缩进不产生假栏")
+expect(TextLayout.blocks(in: indented).count, 1, "段首缩进不产生假栏")
 
 // 居中标题：横向范围窄，但被正文行覆盖，同样不该切栏。
 let centered = [
     line("居中的标题", x: 0.35, top: 0.04, width: 0.30, height: 0.035),
 ] + column(["正文第一行的内容在这里", "正文第二行的内容在这里"],
            x: 0.10, firstTop: 0.12, step: 0.04, width: 0.80)
-expect(TextLayout.columns(centered).count, 1, "居中标题不产生假栏")
+expect(TextLayout.blocks(in: centered).count, 1, "居中标题不产生假栏")
 
 // 三栏。
 let threeColumn = column(["甲一", "甲二"], x: 0.03, firstTop: 0.10, step: 0.04, width: 0.25)
     + column(["乙一", "乙二"], x: 0.37, firstTop: 0.10, step: 0.04, width: 0.25)
     + column(["丙一", "丙二"], x: 0.71, firstTop: 0.10, step: 0.04, width: 0.25)
-expect(TextLayout.columns(threeColumn).count, 3, "三栏 → 三栏")
+expect(TextLayout.blocks(in: threeColumn).count, 3, "三栏 → 三栏")
 
 // 栏内排序：自上而下；同一基线上按 minX（ordercheck 钉的同一条不变量）。
 let sameRow = [line("右", x: 0.60, top: 0.20, width: 0.10),
@@ -254,15 +254,46 @@ print("\n【边界】")
 expect(TextLayout.paragraphs(from: []), [], "空输入 → 空输出")
 expect(TextLayout.paragraphs(from: [line("只有一行", x: 0.10, top: 0.10, width: 0.30)]),
        ["只有一行"], "只有一行 → 一段")
-expect(TextLayout.columns([]), [], "分栏/空输入 → 空")
+expect(TextLayout.blocks(in: []), [], "分栏/空输入 → 空")
 
-// 一行横跨整页、别的行分列两侧：它跨过了那条缝，所以这页不是这个分法。
-// 退回单栏，而不是把这行丢进错误的一栏。
+// **通栏标题不该毁掉分栏。** 一条横跨两栏的标题（居中题头够不到左右两栏的边界，
+// 但它自己跨过了中间那条缝）在真实说明书上**到处都是**——而它正是真机报回来的那个
+// 「左右跳」的成因：
+//
+// 旧判据取所有行横向区间的**并集**，再要并集内部有零空档。题头把并集连成一片，
+// 真正的栏缝于是**一条都找不到**；反倒因题头够不到左栏右边缘而裂出一条窄缝，
+// 被当成栏缝挑走。结果是「左栏」自成一块、「右栏 + 题头」粘成另一块——**标题跑到
+// 两栏中间**。这一段把那条路堵死：题头自成一块，排在两栏之前。
 let crossing = [
     line("横跨两栏的通栏标题", x: 0.05, top: 0.02, width: 0.90, height: 0.035),
 ] + column(["左栏内容在这", "左栏第二行"], x: 0.05, firstTop: 0.10, step: 0.04, width: 0.40)
   + column(["右栏内容在这", "右栏第二行"], x: 0.55, firstTop: 0.10, step: 0.04, width: 0.40)
-expect(TextLayout.columns(crossing).count, 1, "有通栏行跨过竖缝 → 退回单栏（不丢行）")
+expect(TextLayout.blocks(in: crossing).map { $0.map(\.text) },
+       [["横跨两栏的通栏标题"], ["左栏内容在这", "左栏第二行"], ["右栏内容在这", "右栏第二行"]],
+       "通栏标题 → 自成一块且排在两栏之前（旧判据在这里把标题放进两栏之间）")
+
+// **旧判据真实失败的那种形状**：题头**居中**，够不到左栏的右边缘。
+// 于是题头左边裂出一条窄缝（跨越行数 0，比真栏缝还「干净」），真栏缝则被题头跨过。
+// 排名**先比宽度**才挑得对——真栏缝总是更宽。
+let centeredHeadingPage = [
+    line("复方氨酚烷胺片说明书", x: 0.32, top: 0.03, width: 0.36, height: 0.035),
+] + column(["左栏第一行正文写在这里", "左栏第二行正文写在这里", "左栏第三行正文写在这里"],
+           x: 0.05, firstTop: 0.10, step: 0.04, width: 0.24)
+  + column(["右栏第一行正文写在这里", "右栏第二行正文写在这里", "右栏第三行正文写在这里"],
+           x: 0.55, firstTop: 0.10, step: 0.04, width: 0.24)
+expect(TextLayout.blocks(in: centeredHeadingPage).map { $0.map(\.text) },
+       [["复方氨酚烷胺片说明书"],
+        ["左栏第一行正文写在这里", "左栏第二行正文写在这里", "左栏第三行正文写在这里"],
+        ["右栏第一行正文写在这里", "右栏第二行正文写在这里", "右栏第三行正文写在这里"]],
+       "居中题头 + 两栏 → 题头在前、左栏整栏、右栏整栏（真机报的就是这条错）")
+
+// 一条孤零零的短行不该把单栏切成两栏：它和正文之间确实有空档，但一侧**只有它自己**。
+// 挡这条的是平衡判据——假空档两侧是「一行 vs 其余所有行」，真栏缝两侧都成栏。
+let strayLine = column(["正文第一行写满了整行宽度内容", "正文第二行写满了整行宽度内容",
+                        "正文第三行写满了整行宽度内容", "正文第四行写满了整行宽度内容"],
+                       x: 0.10, firstTop: 0.10, step: 0.04, width: 0.35)
+    + [line("孤零零的一行", x: 0.55, top: 0.30, width: 0.10)]
+expect(TextLayout.blocks(in: strayLine).count, 1, "孤零零的一行不产生假栏（平衡判据）")
 
 print("\n  共 \(total) 条断言")
 if failures == 0 {
