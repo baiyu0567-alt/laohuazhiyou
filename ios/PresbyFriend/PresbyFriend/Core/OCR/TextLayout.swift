@@ -174,6 +174,10 @@ enum TextLayout {
         guard let gutter = verticalGutters(in: lines).first else { return lines }
         let sides = [lines.filter { $0.maxX <= gutter.start },
                      lines.filter { $0.minX >= gutter.end }]
+
+        // 先看有没有哪一侧**整条**都不是栏，而是一条页边残字——那一侧整条丢掉。
+        if let sliver = sliverSide(sides) { return lines.filter { !sliver.contains($0) } }
+
         let dropped = sides.flatMap { side -> [TextLine] in
             // 只对**单栏**的一侧动手。那一侧要是自己还能切出栏来，说明它不是一条正文
             // 栏（可能是另一组并排的栏），「中位数 = 正文边缘」这句话就不成立了。
@@ -182,6 +186,43 @@ enum TextLayout {
         }
         guard !dropped.isEmpty else { return lines }
         return lines.filter { !dropped.contains($0) }
+    }
+
+    /// 两侧里是不是有一侧根本不是「栏」，而是**贴着页边的一条残字**。
+    ///
+    /// 两条判据**同时**成立才算，各自挡住对方的误判：
+    ///
+    /// 1. **横向跨度不到另一侧的一半。** 一条残字没有栏宽——真机那张英语卷子
+    ///    （IMG_0004）右缘那列手写旁注占 0.059 的宽度，正文占 0.726，差 12 倍。
+    ///    只有这一条的话，「一栏写满了、另一栏只剩几行」的正常分栏页会被误杀；
+    /// 2. **行数也不到另一侧的一半。** 只有这一条的话，「一栏本来就只有几行」的页
+    ///    会被误杀——报纸那种左栏写满、右栏只补几行的版式是常事。
+    ///
+    /// 两条合起来，加上「跨度不到一半」这一半，才是「它不是栏」。
+    ///
+    /// 实测三张真机照片（`sliverFraction` = 0.5）：
+    ///
+    /// | 照片 | 左跨度 / 右跨度 | 左行 / 右行 | 判定 |
+    /// |---|---|---|---|
+    /// | IMG_0002（真两栏） | 0.437 / 0.295 | 28 / 28 | 都不是（行数相当） |
+    /// | IMG_0003（真两栏） | 0.317 / 0.465 | 25 / 26 | 都不是（行数相当） |
+    /// | IMG_0004（正文 + 右缘旁注） | 0.726 / 0.059 | 46 / 15 | 右是残条 |
+    ///
+    /// IMG_0003 那一行说明**为什么非要两条同时**：它的左栏比右栏窄三分之一
+    /// （0.317 对 0.465，比值 0.68），只比阈值 0.5 高一点点——单看跨度它险些被误杀，
+    /// 是「行数相当」这一条把它保下来的。
+    private static func sliverSide(_ sides: [[TextLine]]) -> [TextLine]? {
+        guard sides.count == 2, !sides[0].isEmpty, !sides[1].isEmpty else { return nil }
+        func extent(_ side: [TextLine]) -> Double {
+            guard let lo = side.map(\.minX).min(), let hi = side.map(\.maxX).max() else { return 0 }
+            return hi - lo
+        }
+        for (a, b) in [(1, 0), (0, 1)] {
+            let narrow = extent(sides[a]) < extent(sides[b]) * sliverFraction
+            let few = Double(sides[a].count) < Double(sides[b].count) * sliverFraction
+            if narrow && few { return sides[a] }
+        }
+        return nil
     }
 
     /// 一侧（单栏）里的页边残字：**贴在这一侧最外面、和主体不相接的一小撮**。
@@ -813,8 +854,26 @@ enum TextLayout {
             }
             characterWidth = Metrics.median(widths) ?? 0
 
-            let rightEdges = ordered.map(\.maxX)
-            typicalRightEdge = Metrics.median(rightEdges) ?? 0
+            // **取高分位，不取中位数。** 这个量要回答的是「一行写满能写到哪」，
+            // 也就是**本块正文的右边界**——那是被**最长的那些行**定义的，不是被
+            // 一半的行定义的。用中位数要求「过半的行都是满宽行」，而正常正文里
+            // 段末行、标题行、表格行天生就短，过半根本达不到。
+            //
+            // 真机那张英语卷子（IMG_0004）上这条判据整个失灵：整页塌成一块之后，
+            // 60 行里只有十几行是满宽，`maxX` 的中位数掉到 **0.492**（真右边界 0.909），
+            // 「上一行是短行」的阈值跟着掉到 0.418，于是第 4 题的四个选项
+            // （右端 0.458 / 0.474 / 0.505 / 0.575）一个都够不着，被并成了一段。
+            // 同一块上 0.8 分位是 **0.890**，阈值回到 0.757，四个选项全部断开。
+            //
+            // **换分位几乎不影响同质的块**，因为那里中位数本来就在最高一档附近——
+            // 另外两张照片上逐块实测：IMG_0002 17 行的块 0.849→0.857（其余各块相等），
+            // IMG_0003 23 行的块 0.388→0.390、24 行的块 0.890→0.892。差的是
+            // **混杂的块**，而那正是旧算法错的地方。
+            let rightEdges = ordered.map(\.maxX).sorted()
+            typicalRightEdge = rightEdges.isEmpty ? 0 : rightEdges[
+                min(rightEdges.count - 1,
+                    Int(Double(rightEdges.count - 1) * TextLayout.rightEdgeQuantile))
+            ]
         }
 
         /// 这段的起点是不是新的一段。
@@ -966,6 +1025,19 @@ enum TextLayout {
 
     /// 一页最多认几栏。切过头说明这页不是分栏版式，那时保序比强行分栏安全。
     static let columnLimit = 4
+
+    /// 判「短行」时，「本块正文的右边界」取 `maxX` 的第几分位。
+    ///
+    /// 不用中位数：这个量是由**最长的那些行**定义的，不是由一半的行定义的。
+    /// 实测与推导见 `Metrics.init(of:)` 里 `typicalRightEdge` 那一大段。
+    static let rightEdgeQuantile = 0.8
+
+    /// 一侧的**跨度**和**行数**都不到另一侧的这个比例时，它不是栏，是页边的一条残字。
+    ///
+    /// 两条要同时成立，理由和实测见 `sliverSide`：单独任何一条都会误杀一种正常版式
+    /// （窄栏 / 短栏）。三张真机照片上，残条是 0.08 和 0.25，真栏是 0.68 和 0.96——
+    /// 0.5 落在中间，两侧各留 1.9 倍和 2 倍的余量。
+    static let sliverFraction = 0.5
 
     /// 两块竖直方向重叠超过**较矮那一块**的这个比例，就算并排的同一行。
     ///
