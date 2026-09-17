@@ -90,13 +90,19 @@ PresbyFriend 的 iOS 版用 Vision 做图片 OCR。它的失败模式很隐蔽�
 ```
 
 不需要图片。它把 `RecognitionLanguage.swift` 的生产代码原文件直接编进来（见 `build.sh`），
-共 142 条断言，覆盖七组规则。**「本机 Vision 支持清单」以参数注入**，用的是真机实测的
+共 150 条断言，覆盖七组规则。**「本机 Vision 支持清单」以参数注入**，用的是真机实测的
 33 种那份固定清单，所以这套断言不依赖跑它的机器。
 
 1. **设备语言 → Vision 码 `systemLanguageCode`**：`de-AT` → `de-DE`、裸 `ja` → `ja-JP`、
-   大小写不敏感；中文/粤语**按文字分档**（`zh-TW`/`zh-HK`/`zh-MO` 没有文字标记也判繁体）；
-   把清单倒序结果不变（证明分档不靠 `hasPrefix` 撞对）；设备清单里没有繁体时落简体；
-   设备语言 Vision 不认识（冰岛语）落英文，而不是递一个不存在的码
+   大小写不敏感；中文/粤语**按文字分档**——**显式的 `-Hans`/`-Hant` 子标签压过地区**
+   （`zh-Hans-HK` / `zh-Hans-MO` / `zh-Hans-TW` 都是简体，`zh-Hant-CN` / `zh-Hant-MY` 都是
+   繁体），只有没写文字时才拿地区推断（`zh-TW`/`zh-HK`/`zh-MO` 判繁体）；把清单倒序结果
+   不变（证明分档不靠 `hasPrefix` 撞对）；设备清单里没有繁体时落简体；设备语言 Vision
+   不认识（冰岛语）落英文，而不是递一个不存在的码
+   > `zh-Hans-HK` / `zh-Hans-MO` 这几条是**补一个真出过的缺陷**：`Locale.availableIdentifiers`
+   > 里确实有 `zh_Hans_HK` / `zh_Hans_MO`，iOS 上用户选「中文（简体）」加香港或澳门地区给的
+   > 就是它们，而只看地区的实现会把它们判成繁体。补之前那 142 条里没有这两条，所以那个缺陷
+   > 是**全绿通过**的——这也说明这套断言只覆盖它想到的情况。
 2. **`visionLanguages`**：跟随系统取设备那一档；手动档与设备语言**完全无关**
    （德语设备 + 手动中文 → `zh-Hans`）；手动码本机不支持时落 `["en-US"]`
 3. **`effectiveLanguageCode` 与 `visionLanguages` 一致**：两者分家的话，设置页的 ❗

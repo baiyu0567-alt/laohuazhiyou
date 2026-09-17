@@ -53,8 +53,12 @@ enum RecognitionLanguage: Hashable {
     ///
     /// - Parameters:
     ///   - raw: `UserDefaults` 里的原始字符串。可为 nil。
-    ///   - supported: 本机 Vision 支持的码。识别不了的档位等于把「语言选错」固化下来，
-    ///     所以认不出来一律返回 nil，由调用方给默认值。
+    ///   - supported: 本机 Vision 支持的码。这里只用它**校验来路不明的码**——直接存成
+    ///     语言码的那一支（`"ja-JP"` 这种）认不出来就返回 nil，免得把一个本机不存在的
+    ///     码固化下来。上面那批**固定档位名不查它**（`"german"` 恒给 `"de-DE"`）：它们
+    ///     来路明确，是本 App 自己写进去的，而「这台设备能不能用这个码」是**使用那一刻**
+    ///     的属性，由 `visionLanguages` 兜底。在这里查的代价是——用户明选过德语，却因为
+    ///     此刻查不到清单而被改写成「跟随系统」，正是本函数要避免的那种静默重置。
     /// - Returns: 认不出来时返回 nil。
     static func stored(from raw: String?, supported: [String]) -> RecognitionLanguage? {
         guard let raw else { return nil }
@@ -89,11 +93,26 @@ enum RecognitionLanguage: Hashable {
 
         // 中文和粤语按**文字**分档，不能只靠语言部分匹配——`zh-Hans` 与 `zh-Hant` 的语言
         // 部分都是 `"zh"`，下面那条 `hasPrefix` 会先撞上哪一个完全取决于清单顺序。
-        // 台湾、香港、澳门设备给的是 `zh-Hant-TW` / `zh-Hant-HK`，但也有只写 `zh-TW`
-        // / `zh-HK` 的，两种都认。
+        //
+        // **显式的文字子标签优先于地区。** 只按地区判断会把 `zh-Hans-HK` / `zh-Hans-MO`
+        // 判成繁体——这两个是本机真实存在的标识符（`Locale.availableIdentifiers` 里有
+        // `zh_Hans_HK` / `zh_Hans_MO`），iOS 上用户选「中文（简体）」加香港或澳门地区就会
+        // 得到它们。判反了的后果正是本文件一直在防的那个模式：默认档拿繁体模型去认简体
+        // 文本，不报错、不崩溃，两处新提示还会反过来指责用户——设置页亮 ❗，阅读页写
+        // 「识别为简体中文，但你的系统语言是繁體中文」，而系统语言根本不是繁体。
+        //
+        // 地区只在**没有**文字子标签时才用来推断：`zh-TW` / `zh-HK` / `zh-MO` 只有地区，
+        // 那才需要靠它判文字。
         if base == "zh" || base == "yue" {
-            let isTraditional = code.contains("hant") || code.contains("-tw")
-                || code.contains("-hk") || code.contains("-mo")
+            let isTraditional: Bool
+            if code.contains("-hant") {
+                isTraditional = true
+            } else if code.contains("-hans") {
+                isTraditional = false
+            } else {
+                isTraditional = code.contains("-tw") || code.contains("-hk")
+                    || code.contains("-mo")
+            }
             let wanted = base + (isTraditional ? "-Hant" : "-Hans")
             if supported.contains(wanted) { return wanted }
         }
@@ -127,8 +146,12 @@ enum RecognitionLanguage: Hashable {
             code = manualCode
         }
 
-        // 再把关一次：手动档的码可能是旧存储值、也可能是从别的设备同步来的，
-        // 而它未必在这台设备的清单里。递一个不存在的码给 Vision 得不到报错。
+        // 再把关一次：手动档的码可能来自旧存储值，而它未必在这台设备的清单里。
+        // 递一个不存在的码给 Vision 得不到报错，只会安静地认错。
+        //
+        // （这里**不**提「从别的设备同步来的」：`SettingsModel.syncToCloud()` 只写
+        // fontSize/theme/lineHeight/letterSpacing 四项，`recognitionLanguage` 从不上云，
+        // 也没有别的入径能把它带进来。）
         guard supported.contains(code) else { return ["en-US"] }
         return [code]
     }

@@ -103,6 +103,11 @@ final class ReaderLaunchCoordinator: ObservableObject {
         fallbackImage = nil
         languageHint = nil
 
+        // 把这一档固定在发请求的这一刻，理由见 `hint(for:failed:usedCode:)`。
+        // 只快照它、不快照 `systemLanguageCode`：那一档是**设备**属性，改它要进系统设置，
+        // 而那会让 App 退到后台、这次识别早就结束了；能在这个窗口里变的只有设置页那一项。
+        let usedForThisRequest = usedLanguageCode
+
         isPreparing = true
         recognitionFailed = false
         // 只有仍然是「当前这一次」时才由自己收尾，否则会把后来者的转圈关掉。
@@ -124,7 +129,7 @@ final class ReaderLaunchCoordinator: ObservableObject {
         guard token == generation else { return }
 
         recognitionFailed = failed
-        languageHint = hint(for: blocks, failed: failed)
+        languageHint = hint(for: blocks, failed: failed, usedCode: usedForThisRequest)
         if !failed, !joined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             text = joined
             fallbackImage = nil
@@ -148,10 +153,14 @@ final class ReaderLaunchCoordinator: ObservableObject {
     ///
     /// 引擎抛错时也不提示：那是 Vision 自己失败了，跟语言选得对不对无关，
     /// 兜底文案已经在说这件事。
-    private func hint(for blocks: [RecognizedBlock], failed: Bool) -> LanguageHint? {
-        guard !failed, usedLanguageCode != systemLanguageCode else { return nil }
+    /// - Parameter usedCode: **这一次识别实际用的**那一档，由调用方在发请求那一刻取好。
+    ///   不能用 `usedLanguageCode` 这个活的值：`ocr.recognize` 在请求开始时就快照了语言
+    ///   数组，而设置页一改语言 `updateLanguages` 就会把它换掉，于是跑完的这次识别会被
+    ///   归因到**没有参与过它**的那一档上，提示里写的语言名是错的。
+    private func hint(for blocks: [RecognizedBlock], failed: Bool, usedCode: String) -> LanguageHint? {
+        guard !failed, usedCode != systemLanguageCode else { return nil }
         guard Self.looksWeak(blocks) else { return nil }
-        return LanguageHint(usedCode: usedLanguageCode, systemCode: systemLanguageCode)
+        return LanguageHint(usedCode: usedCode, systemCode: systemLanguageCode)
     }
 
     /// 这次识别是不是整体不可信。
@@ -169,14 +178,29 @@ final class ReaderLaunchCoordinator: ObservableObject {
     /// 只差 0.08，那是噪声级的差距。两个条件取「且」才把六个样本全部分对——
     /// 正例靠占比那一半挡住，反例两条都满足。
     ///
+    /// **块数少到统计没有意义时不做判断**（`minBlocksForStatistics`）。上表里那行正确的
+    /// 两栏图是**只有 2 个块**、均值 0.400——它没有误报，靠的仅仅是两块里有一块高于 0.5，
+    /// 于是占比停在 50%、没越过 0.8。两块都低一点就会翻过去：均值仍 < 0.5、占比 100%，
+    /// 两条都满足，提示就会去指责一个**做对了**的用户。这不是假想的边缘情况，它是表里
+    /// 那一行再走半步。而两个真阳性（4 块 / 10 块）都在门槛之上，所以这条门槛把两个真阳性
+    /// 全留下，同时把那半步结构性挡住。
+    ///
+    /// **代价写清楚**：短文本（1–3 个块）用错语言时不再提示。这是故意换的——只有一两行字
+    /// 时，「语言选错」和「这张照片本身就糊」在统计上分不开，而误报是当着做对了的人的面
+    /// 说他错了，比少说一句更坏。这类用户仍然有设置页那个 ❗ 常驻提醒他偏离了系统语言。
+    ///
     /// **误报与漏报的代价不对称**：误报是当着一个做对了的用户的面说他可能错了，
     /// 漏报只是少显示一句提示。所以这里宁漏不误，宁可把阈值定紧。
     ///
     /// ⚠️ 样本只有两张**合成图**，而 `tools/ocr-bench/README.md`「局限」一节写明合成图
     /// 不含真实照片的透视畸变、光照不均、反光，且合成图上正确识别本身就只有 0.400。
-    /// 真机上拿真实药盒照片复验过再定这两个阈值。
+    /// 真机上拿真实药盒照片复验过再定这三个阈值。
     private static func looksWeak(_ blocks: [RecognizedBlock]) -> Bool {
+        // 一个字都没认出来——最强的信号，且与样本量无关，所以它排在块数门槛**之前**：
+        // 一张图里零个块，本身就是「这次白拍了」，不需要统计。
         guard !blocks.isEmpty else { return true }
+        guard blocks.count >= minBlocksForStatistics else { return false }
+
         let confidences = blocks.map(\.confidence)
         let count = Float(confidences.count)
         let mean = confidences.reduce(0, +) / count
@@ -184,6 +208,9 @@ final class ReaderLaunchCoordinator: ObservableObject {
         return mean < weakMeanConfidence && lowFraction > weakLowFraction
     }
 
+    /// 块数少于它就不做统计判断。取 4 的理由见 `looksWeak` 的文档：这是能同时留下
+    /// 标定表里两个真阳性（4 块 / 10 块）的最小值。
+    private static let minBlocksForStatistics = 4
     /// 单个块低于它算「低置信度」。
     private static let lowConfidence: Float = 0.5
     /// 整批平均低于它、且低置信度块占比高于 `weakLowFraction`，才判为弱。

@@ -201,8 +201,26 @@ struct SettingsView: View {
 
     // MARK: - 识别语言
 
-    /// 手动档的选项来源，按本族名排序。
-    private var supportedLanguageCodes: [String] { OCRSupportedLanguageCodes.sorted }
+    /// 手动档的选项来源：Vision 的运行时清单，按本族名排序，**外加当前这一档**（若它不在
+    /// 清单里）。
+    ///
+    /// 为什么要补那一手：`Picker` 的 `selection` 只要没有相等的 tag 就渲染成空行——
+    /// 值还在，界面上却是一个空白格，用户既看不出选的是什么，也看不出它其实用不了。
+    /// 而 `recognitionLanguage` 确实可以不在清单里：迁移旧档位名时（`chinese` → `zh-Hans`）
+    /// 按设计**不查** `supported`（见 `stored(from:supported:)`），而清单本身在查询失败时
+    /// 会退化成 `["en-US"]`。
+    ///
+    /// 补进去而不是把值改掉：改成别的等于把用户选过的语言**静默重置**，正是迁移那段要避免
+    /// 的事。补进去则界面照实显示他的选择，而下面「当前使用」那一行会写明真正在跑的是哪一档
+    /// ——两行合起来是实话。
+    private var supportedLanguageCodes: [String] {
+        let catalog = OCRSupportedLanguageCodes.sorted
+        guard case .manual(let code) = vm.recognitionLanguage,
+              !catalog.contains(code) else { return catalog }
+        return ([code] + catalog).sorted {
+            RecognitionLanguage.displayName(for: $0) < RecognitionLanguage.displayName(for: $1)
+        }
+    }
 
     /// 这一档实际会用哪个模型。「跟随系统」由设备语言解析而来，手动档就是它自己。
     private var effectiveLanguageCode: String {

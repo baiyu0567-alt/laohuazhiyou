@@ -72,11 +72,28 @@ expect(system("zh-MO"),       "zh-Hant", "zh-MO")
 expect(system("yue-Hant-HK"), "yue-Hant", "yue-Hant-HK")
 expect(system("yue"),         "yue-Hans", "裸 yue → 简体")
 
+// **显式的文字子标签必须压过地区。** 这几条是补一个真出过的缺陷：只按地区判断会把
+// `zh-Hans-HK` / `zh-Hans-MO` 判成繁体，而这两个是本机真实存在的标识符
+// （`Locale.availableIdentifiers` 里有 `zh_Hans_HK` / `zh_Hans_MO`）——iOS 上用户选
+// 「中文（简体）」加香港或澳门地区给的就是它们。判反的后果是默认档拿繁体模型认简体文本，
+// 且两处新提示会反过来指责用户。
+//
+// 之前的 142 条里没有这两条，所以那个缺陷是全绿通过的——这几行就是补上那个洞。
+expect(system("zh-Hans-HK"),  "zh-Hans", "zh-Hans-HK：地区 HK，但文字明写简体")
+expect(system("zh-Hans-MO"),  "zh-Hans", "zh-Hans-MO：地区 MO，但文字明写简体")
+expect(system("zh-Hans-TW"),  "zh-Hans", "zh-Hans-TW：地区 TW，但文字明写简体")
+expect(system("zh-Hans-SG"),  "zh-Hans", "zh-Hans-SG")
+expect(system("zh-Hant-CN"),  "zh-Hant", "zh-Hant-CN：地区 CN，但文字明写繁体")
+expect(system("zh-Hant-MY"),  "zh-Hant", "zh-Hant-MY")
+expect(system("yue-Hant-MO"), "yue-Hant", "yue-Hant-MO")
+
 // 上面那段的注释声称「不取决于清单顺序」。把清单倒过来，它就成了一句可验证的话：
 // 若把 zh 那一支改回 hasPrefix 匹配，这两行会跟着清单顺序翻面。
 let reversed = Array(supported.reversed())
 expect(system("zh-Hant-TW", reversed), "zh-Hant", "清单倒序，繁体仍是繁体")
 expect(system("zh-Hans",    reversed), "zh-Hans", "清单倒序，简体仍是简体")
+// 文字子标签是**读出来的**，不是靠清单顺序撞对的，所以倒序也不能翻面。
+expect(system("zh-Hans-HK", reversed), "zh-Hans", "清单倒序，zh-Hans-HK 仍是简体")
 
 // 设备清单里没有繁体模型时，落回同一语言的简体比落回英文有用（简体模型多半能读繁体）。
 // 这是刻意的取舍，不是漏配。
