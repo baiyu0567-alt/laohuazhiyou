@@ -2,17 +2,33 @@ import Foundation
 import Vision
 import CoreGraphics
 
-/// 一个识别出的文本块。
+/// 一个识别出的文本块：**文字 + 它在画面里的位置** + 置信度。
+///
+/// 位置从原来的「一个 `topYRatio`」扩成整个 `TextLine`（含 `minX` / `width` / `height`），
+/// 因为**只留纵向一个数是不够的**——版式重建要判分栏、判缩进、判短行，全都要横向信息，
+/// 而这些东西一旦在这一步丢掉，下游任何一层都再拿不回来。真机报回来的
+/// 「识别的内容缺乏合理的组织」就是从这里开始的（详见 `TextLayout` 的文件头）。
+///
+/// `text` 与 `topYRatio` 保留成计算属性而不是字段：`ordercheck` 有两条断言直接读它们，
+/// 而那两条钉的行为没有变（顺序照旧、换算照旧），不该为这次改动跟着改测试。
 struct RecognizedBlock: Equatable {
-    let text: String
-    /// 0 = 画面顶部，1 = 画面底部。用于恢复阅读顺序。
-    let topYRatio: Double
+    /// 这一块在画面里的位置。坐标是 `TextLayout` 那一套：**归一化、y 向下为正**。
+    let line: TextLine
+
     /// Vision 给这个块的置信度（0–1）。
     ///
     /// 只用来判断「这一次识别整体可不可信」（见 `ReaderLaunchCoordinator.looksWeak`）。
     /// **不要**拿它筛块或排序：实测**正确**识别的块也会低到 0.30（合成图上「用法用量」
     /// 那一行就是），单块阈值没有意义，只有整批的统计量才分得开好坏。
     let confidence: Float
+
+    var text: String { line.text }
+
+    /// 0 = 画面顶部，1 = 画面底部。
+    ///
+    /// 就是 `line.top`——`TextLine` 用的已经是「y 向下为正」，两者是同一个数，
+    /// 这里不再翻一次（换算只在 `blocks(from:)` 里做一处）。
+    var topYRatio: Double { line.top }
 }
 
 /// 唯一接触 Vision 的地方：把「一张图」变成「一串文本块」。
@@ -110,7 +126,12 @@ final class TextRecognitionService {
     /// 比较器必须是全序：`sorted(by:)` 不保证稳定，同一行内被 Vision 拆开的块
     /// （字号混排、表格、带上标的标题）若 `origin.y` 相等，顺序会逐次运行而变。
     /// 所以 y 相等时再按 `minX` 升序（左栏在前）打破平局。
-    /// 真正的两栏重排需要行聚类，不在本任务范围内。
+    ///
+    /// **这个顺序是「一栏之内」的正确顺序，不是「整页」的。** 它是按基线
+    /// （`origin.y`）比的，跨栏用它就会逐行交错（真实照片上左右两栏的行不落在同一个 y 上）。
+    /// 整页的阅读顺序要先把栏切开再排，那一步在 `TextLayout.columns` + `readingOrder`
+    /// 里做——本函数**保持原样不动**，因为它是栏内的正确解，且 `ShareView` 与
+    /// `RecognitionLanguageAudit` 都在用它，而它们不需要分栏。
     static func blocks(from observations: [VNRecognizedTextObservation]) -> [RecognizedBlock] {
         observations
             .sorted { a, b in
@@ -120,11 +141,17 @@ final class TextRecognitionService {
                 return a.boundingBox.minX < b.boundingBox.minX
             }
             .compactMap { obs in
-                guard let top = obs.topCandidates(1).first else { return nil }
+                guard let candidate = obs.topCandidates(1).first else { return nil }
                 let box = obs.boundingBox
-                return RecognizedBlock(text: top.string,
-                                       topYRatio: 1.0 - Double(box.origin.y + box.height),
-                                       confidence: top.confidence)
+                // Vision 的包围盒是「原点左下、y 向上」的归一化坐标；`TextLine` 要的是
+                // 「原点左上、y 向下」。**翻转只在这一处做**，这样 `TextLayout` 和它的
+                // 断言都不必每处都记得 y 是反的——那种「每处都记得」的约定迟早会漏。
+                let line = TextLine(text: candidate.string,
+                                    minX: Double(box.minX),
+                                    top: 1.0 - Double(box.origin.y + box.height),
+                                    width: Double(box.width),
+                                    height: Double(box.height))
+                return RecognizedBlock(line: line, confidence: candidate.confidence)
             }
     }
 }

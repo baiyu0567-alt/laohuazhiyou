@@ -254,7 +254,7 @@ struct ContentView: View {
     @ViewBuilder
     private var readerContent: some View {
         if let text = coordinator.text {
-            ReaderView(text: text, paragraphs: nil,
+            ReaderView(text: text, paragraphs: coordinator.paragraphs,
                        languageHint: coordinator.languageHint,
                        onClose: { coordinator.close() })
         } else if let source = coordinator.fallbackImage {

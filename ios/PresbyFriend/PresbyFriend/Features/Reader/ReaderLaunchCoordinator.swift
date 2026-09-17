@@ -43,7 +43,22 @@ final class ReaderLaunchCoordinator: ObservableObject {
     /// 正在 OCR。UI 用它显示「正在准备」而不是卡住。
     @Published var isPreparing = false
     /// 待阅读的文本。OCR 成功后由识别结果填入。
+    ///
+    /// **与 `paragraphs` 同源**：这里放的是段落用 `"\n\n"` 接起来的样子，
+    /// `paragraphs` 放的是分开的一份。`ReaderView` 两个都要——正文用 `paragraphs`
+    /// 逐段渲染（段间距、逐段朗读），而 `text` 是它自己的兜底输入。
     @Published var text: String?
+
+    /// OCR 结果重建出来的段落。**这才是阅读页真正渲染的东西。**
+    ///
+    /// 从前这里没有它，`text` 是一串按视觉行 `"\n"` 接起来的字符串，而
+    /// `ReaderViewModel.setParagraphs(from:)` 按 `"\n\n"` 切——OCR 路径从不产生
+    /// `"\n\n"`，于是 `paragraphs` 恒为空，`ReaderView` 整篇渲染成**一个 `Text`**：
+    /// 一句话折了三行就断成三行，没有段间距，朗读一路念到底。真机报的
+    /// 「识别的内容缺乏合理的组织」说的就是这个。
+    ///
+    /// 由 `TextLayout.paragraphs(from:)` 从每个块的 `line` 几何重建，见那里的文档。
+    @Published var paragraphs: [String]?
     /// OCR 没认出文字时的兜底：直接显示原图（只支持缩放）。
     @Published var fallbackImage: OCRImageSource?
 
@@ -121,6 +136,7 @@ final class ReaderLaunchCoordinator: ObservableObject {
         // 调用点（放大镜快门、读取 tab 的相册选择）都在全屏阅读页**底下**，阅读页开着时
         // 点不到它们。但没有任何东西在保证这一点。
         text = nil
+        paragraphs = nil
         fallbackImage = nil
         languageHint = nil
 
@@ -145,7 +161,12 @@ final class ReaderLaunchCoordinator: ObservableObject {
             blocks = []
             failed = true
         }
-        let joined = blocks.map(\.text).joined(separator: "\n")
+        // 视觉行 → 段落。**这一步在 App 里只此一处**：`blocks` 已经带着每个块的
+        // 几何（`line`），版式重建全部由 `TextLayout` 从几何推出来，见那里的文档。
+        let paragraphs = TextLayout.paragraphs(from: blocks.map(\.line))
+        // 段落之间用 `"\n\n"` 接，与 `ReaderViewModel` 自己的接法一致（它拿段落时会
+        // 反过来 `joined(separator: "\n\n")` 填回 `text`）。
+        let joined = paragraphs.joined(separator: "\n\n")
 
         // 等待期间用户可能已经关掉、或又开了别的。过期的结果一律不许放行。
         guard token == generation else { return }
@@ -157,6 +178,7 @@ final class ReaderLaunchCoordinator: ObservableObject {
                             text: joined)
         if !failed, !joined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             text = joined
+            self.paragraphs = paragraphs
             fallbackImage = nil
         } else {
             // 空结果不算错误（图里确实没文字），识别失败也不算：两者都兜底显示原图，

@@ -158,7 +158,11 @@ struct ShareView: View {
             failed = true
         }
 
-        let joined = blocks.map(\.text).joined(separator: "\n")
+        // 与 App 内 `ReaderLaunchCoordinator.open(image:)` 同一套：视觉行 → 段落，
+        // 段落之间用 `"\n\n"` 接。分享扩展这条路径此前只 `"\n"` 接视觉行，
+        // 于是 `ReaderView` 整篇渲染成一个 `Text`——和 App 内那个已修的毛病同一个。
+        let recognized = TextLayout.paragraphs(from: blocks.map(\.line))
+        let joined = recognized.joined(separator: "\n\n")
         if failed {
             error = L10n.ocrFail
         } else if joined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -172,6 +176,7 @@ struct ShareView: View {
             error = L10n.noTextFound
         } else {
             text = joined
+            paragraphs = recognized
         }
     }
 
