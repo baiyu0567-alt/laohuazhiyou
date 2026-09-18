@@ -80,23 +80,23 @@ print("语言: \(languages.joined(separator: ", "))")
 print("方向: \(source.orientation.rawValue)  （EXIF，1 = 像素已正立）")
 print("══════════════════════════════════════════")
 
-let request = VNRecognizeTextRequest()
-request.recognitionLevel = .accurate
-request.recognitionLanguages = languages
-request.usesLanguageCorrection = true
+// **请求配置也只能有一个实现。** 这一段原先在这里手抄了一份 `VNRecognizeTextRequest`
+// 的配置，而生产在 `TextRecognitionService.recognize` 里另有一份——两边一旦分家，
+// 这里量的就不是 App 的行为。**已经分家过一次**：`automaticallyDetectsLanguage = true`
+// （提交 `6d8eb1b`「让 Vision 自己判脚本」）加进生产时这里没跟上，于是英文照片上
+// 这个工具跑的仍是「认准清单第一项 `zh-Hans`」的旧行为——IMG_0004 因此量出 **50 段**，
+// 而 App 的真实行为是 **44 段**。上面「方向」那条注释踩的是同一个坑，修法也一样：
+// 直接调生产服务，语言清单、识别级别、语言纠正、脚本自动判定全都只有一处实现。
+let service = TextRecognitionService(languages: languages)
 
 let start = Date()
+let blocks: [RecognizedBlock]
 do {
-    try VNImageRequestHandler(cgImage: source.image,
-                              orientation: source.orientation,
-                              options: [:]).perform([request])
+    blocks = try await service.recognize(source)
 } catch {
     print("❌ 识别失败: \(error)")
     exit(1)
 }
-
-// 走生产代码，不在这里抄一遍排序或翻转。
-let blocks = TextRecognitionService.blocks(from: request.results ?? [])
 
 print("\n识别到 \(blocks.count) 个视觉块，耗时 \(String(format: "%.2f", Date().timeIntervalSince(start)))s")
 print("（几何按 `TextLine` 的约定打印：归一化、y 向下为正，top=0 是画面顶边）")
