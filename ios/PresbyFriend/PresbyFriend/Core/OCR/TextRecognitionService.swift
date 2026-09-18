@@ -13,6 +13,11 @@ import CoreGraphics
 /// 而那两条钉的行为没有变（顺序照旧、换算照旧），不该为这次改动跟着改测试。
 struct RecognizedBlock: Equatable {
     /// 这一块在画面里的位置。坐标是 `TextLayout` 那一套：**归一化、y 向下为正**。
+    ///
+    /// **这一份是去过斜的**（页面有可辨认的弯曲时，`blocks(from:)` 会把每条观测
+    /// 沿竖直方向平移回同一视觉行的共同高度）。也就是说它描述的是**摆正之后那一页**
+    /// 上的位置，不是原照片上的像素位置；两者最多差 `|斜率| × 半页宽`，实测在
+    /// 0.03 的量级。拿它去原图上画框的调用方要留意这一点，目前没有这样的调用方。
     let line: TextLine
 
     /// Vision 给这个块的置信度（0–1）。
@@ -144,34 +149,35 @@ final class TextRecognitionService {
         _ = try? await recognize(OCRImageSource(image: blank))
     }
 
-    /// 按纵向位置排序（画面上方到下方），恢复阅读顺序。
+    /// 按纵向位置排序（画面上方到下方），恢复阅读顺序。顺带走一遍**页面去斜**。
     ///
     /// 比较器必须是全序：`sorted(by:)` 不保证稳定，同一行内被 Vision 拆开的块
     /// （字号混排、表格、带上标的标题）若纵向位置相等，顺序会逐次运行而变。
     /// 所以位置相等时再按 `minX` 升序（左栏在前）打破平局。
     ///
-    /// **主序比的是观测盒的竖直中点（`midY`），不是基线（`origin.y`）。**
+    /// **主序比的是观测盒的竖直中点，不是基线（`origin.y`）。**
     /// 页面倾斜时轴对齐的观测盒会被撑高（`盒高 = 真行高 + |斜率| × 盒宽`），
     /// 基线于是带着碎片**右端**的横向位置，宽碎片和窄碎片之间不可比——真机上
     /// 会把一行靠左的窄碎片排到它上面那一行靠右的宽碎片之前。
     /// 中点把宽度项减掉，宽窄碎片回到同一个尺度。完整推导见
     /// `TextLayout.readingOrder`：**两处的键是同一条，改一处就得改另一处。**
+    /// 这里写的 `line.center` 与原来的 `boundingBox.midY` 是同一个数的两种坐标
+    /// （`center = 1 − midY`，降序 `midY` 就是升序 `center`），换写法只是为了让
+    /// 下面那步去斜能顺带把它挪对。
     ///
     /// **这个顺序是「一栏之内」的正确顺序，不是「整页」的。** 跨栏用它就会逐行交错
     /// （真实照片上左右两栏的行不落在同一个 y 上）。整页的阅读顺序要先把栏切开再排，
     /// 那一步在 `TextLayout.blocks` + `readingOrder` 里做——本函数**不做分栏**，
     /// 因为 `ShareView` 与 `RecognitionLanguageAudit` 都在用它，而它们不需要分栏。
     static func blocks(from observations: [VNRecognizedTextObservation]) -> [RecognizedBlock] {
-        observations
-            .sorted { a, b in
-                let centerA = a.boundingBox.midY
-                let centerB = b.boundingBox.midY
-                if centerA != centerB { return centerA > centerB }
-                return a.boundingBox.minX < b.boundingBox.minX
-            }
-            .compactMap { obs in
-                guard let candidate = obs.topCandidates(1).first else { return nil }
-                let box = obs.boundingBox
+        // 整页的弯曲量一次，再逐条应用。`nil` = 这一页没有可辨认的弯曲，
+        // 下面一个像素都不动——`ShareView` 与 `RecognitionLanguageAudit` 因此在
+        // 平的照片上拿到的是与从前逐位相同的盒。
+        let field = slopeField(from: observations)
+        return observations
+            .compactMap { observation -> (line: TextLine, confidence: Float)? in
+                guard let candidate = observation.topCandidates(1).first else { return nil }
+                let box = observation.boundingBox
                 // Vision 的包围盒是「原点左下、y 向上」的归一化坐标；`TextLine` 要的是
                 // 「原点左上、y 向下」。**翻转只在这一处做**，这样 `TextLayout` 和它的
                 // 断言都不必每处都记得 y 是反的——那种「每处都记得」的约定迟早会漏。
@@ -180,8 +186,63 @@ final class TextRecognitionService {
                                     top: 1.0 - Double(box.origin.y + box.height),
                                     width: Double(box.width),
                                     height: Double(box.height))
-                return RecognizedBlock(line: line, confidence: candidate.confidence)
+                let rectified = field.map {
+                    TextLayout.deskewed(line, by: $0, referenceX: TextLayout.deskewReferenceX)
+                } ?? line
+                return (rectified, candidate.confidence)
             }
+            .sorted { a, b in
+                if a.line.center != b.line.center { return a.line.center < b.line.center }
+                return a.line.minX < b.line.minX
+            }
+            .map { RecognizedBlock(line: $0.line, confidence: $0.confidence) }
+    }
+
+    /// 这一页的斜率场；样本不够或拟合不可信时返回 `nil`。
+    private static func slopeField(from observations: [VNRecognizedTextObservation]) -> SlopeField? {
+        TextLayout.slopeField(samples: tiltSamples(from: observations))
+    }
+
+    /// 逐观测取它**自己**的局部倾斜：首字符盒中心 → 末字符盒中心。
+    ///
+    /// 这是本工程里唯一一处用 `VNRecognizedText.boundingBox(for:)`（**字符**级包围盒）
+    /// 的地方。为什么要用它、以及为什么必须由它来做，推导在 `TextLayout.TiltSample`
+    /// 的文件注释里——一句话：**它不需要判断「哪两段属于同一行」**，而那件事在页面
+    /// 弯曲下是量级上不可辨识的（实测页宽上的倾斜量≈一个行距）。
+    ///
+    /// 两道过滤都是实测出来的，不是估的：`tiltDegenerateEpsilon` 挡 Vision 沿水平线
+    /// 切片（IMG_0003 的 57 条里占 25 条），`minimumTiltSpan` 挡 1/跨度 放大的噪声。
+    private static func tiltSamples(from observations: [VNRecognizedTextObservation]) -> [TiltSample] {
+        var samples: [TiltSample] = []
+        for observation in observations {
+            guard let candidate = observation.topCandidates(1).first else { continue }
+            let text = candidate.string
+            guard text.count >= TextLayout.minimumTiltCharacters else { continue }
+
+            let afterFirst = text.index(text.startIndex, offsetBy: 1)
+            let lastIndex = text.index(text.endIndex, offsetBy: -1)
+            guard let firstBox = try? candidate.boundingBox(for: text.startIndex..<afterFirst),
+                  let lastBox = try? candidate.boundingBox(for: lastIndex..<text.endIndex) else { continue }
+            let first = firstBox.boundingBox
+            let last = lastBox.boundingBox
+
+            let dy = Double(last.midY - first.midY)
+            guard abs(dy) > TextLayout.tiltDegenerateEpsilon else { continue }
+            let dx = Double(last.midX - first.midX)
+            guard abs(dx) >= TextLayout.minimumTiltSpan else { continue }
+
+            let box = observation.boundingBox
+            let line = TextLine(text: text,
+                                minX: Double(box.minX),
+                                top: 1.0 - Double(box.origin.y + box.height),
+                                width: Double(box.width),
+                                height: Double(box.height))
+            // Vision 的 y 向上、`TextLayout` 的 y 向下：斜率的符号在这里翻一次。
+            samples.append(TiltSample(y: line.center,
+                                                 slope: -dy / dx,
+                                                 span: abs(dx)))
+        }
+        return samples
     }
 }
 

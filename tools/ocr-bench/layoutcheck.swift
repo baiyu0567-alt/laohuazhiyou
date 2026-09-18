@@ -389,6 +389,104 @@ expect(TextLayout.paragraphs(from: facingPageBleed),
        ["正文第一行正文第二行", "小", "正文第三行"],
        "别页的残字 → 自成一段，不粘进句子中间（旧判据把它粘在「正文第二行」后面）")
 
+// **选项格的右列接着下一题题干**：这不是「上下相邻的两行」，是**两栏**。
+//
+// 几何逐字照抄 IMG_0006 实测值（第 2 题的选项格 + 第 3 题题干）。去斜之后两条的盒子
+// 纵向叠着 0.0046、横向叠着 **0.082**——占窄的那条（`D.` 的 0.320）的 **26%**。
+// 「一个字都不许叠」的旧判据于是放行：`D. It's less likely to cause knee injuries.`
+// 粘到了下一题题干的**前面**，正是用户报的「有的答案 d 并到下一题 a 之前」。
+// 判据与四组实测见 `startsNewParagraph` 第 4 条。
+//
+// 四条满宽正文行是**为了挡住假栏缝**（与上面两个夹具同一个理由，算式见那里）：
+// 夹具里只有这一处并排，中间那条空档两侧的行数就够 `columnBalanceFraction` 了。
+let optionGridThenNextStem = [
+    line("Race walkers are conditioned athletes. The longest track and field event at the Summer Olympics is the",
+         x: 0.116, top: 0.400, width: 0.841),
+    line("50-kilometer race walk, which is about five miles longer than the marathon. But the sport's rules require",
+         x: 0.116, top: 0.426, width: 0.837),
+    line("that a race walker's knees stay straight through most of the leg swing and one foot remain in contact with",
+         x: 0.119, top: 0.452, width: 0.833),
+    line("the ground at all times. It's this strange form that makes race walking such an attractive activity, says",
+         x: 0.120, top: 0.478, width: 0.751),
+    line("It takes some practice.", x: 0.122, top: 0.504, width: 0.203, height: 0.0145),
+    line("What advantage does race walking have over running?",
+         x: 0.143, top: 0.540, width: 0.387, height: 0.0270),
+    line("B. It's less challenging physically.", x: 0.541, top: 0.562, width: 0.272, height: 0.0310),
+    line("It's more popular at the Olympics.", x: 0.172, top: 0.568, width: 0.244, height: 0.0250),
+    line("D. It's less likely to cause knee injuries.", x: 0.544, top: 0.586, width: 0.320, height: 0.0305),
+    line("C. It's more effective in body building.", x: 0.144, top: 0.591, width: 0.279, height: 0.0266),
+    line("What is Dr. Norberg's suggestion for someone trying race walking?",
+         x: 0.146, top: 0.612, width: 0.480, height: 0.0331),
+]
+expect(TextLayout.paragraphs(from: optionGridThenNextStem),
+       ["Race walkers are conditioned athletes. The longest track and field event at the Summer Olympics is the "
+        + "50-kilometer race walk, which is about five miles longer than the marathon. But the sport's rules require "
+        + "that a race walker's knees stay straight through most of the leg swing and one foot remain in contact with "
+        + "the ground at all times. It's this strange form that makes race walking such an attractive activity, says "
+        + "It takes some practice.",
+        "What advantage does race walking have over running?",
+        "It's more popular at the Olympics.",
+        "B. It's less challenging physically.",
+        "C. It's more effective in body building.",
+        "D. It's less likely to cause knee injuries.",
+        "What is Dr. Norberg's suggestion for someone trying race walking?"],
+       "2×2 选项格 → A B C D 各成一段，`D.` 不粘进下一题题干（旧判据只看「一个字都不叠」）")
+
+// MARK: - 同一视觉行的左右两格（去斜留下的残差）
+
+// 这一组直接考 `visualLines`——它是被改的那一层；`paragraphs` 之上还叠着「怎么切段」，
+// 会把这一层的错法掩饰掉。
+func order(_ lines: [TextLine]) -> [String] {
+    TextLayout.visualLines(in: lines).map { $0.map(\.text).joined() }
+}
+
+// 两个夹具都带几条**满宽的行**，这不是为了像真页面，是为了让 `verticalGutters`
+// **分不出栏**：并排的几条一放在那里，中间那条空档两侧的行数就够 `columnBalanceFraction`
+// 了，`visualLines` 会当场改走「一段一行」那条路，成行与排序根本轮不到跑。
+// **真页面上挡掉假缝的就是正文行，这里照搬。**
+//
+// 要几条才算够——这是三道筛子里最紧的那道（`crossings`）：设满宽行 `c` 条、格子 `m` 个，
+// 任何候选空档都落在页内，跨缝数就是 `c`，而预算跟**总行数**走（`(c+m) × 0.25`）。
+// 要挡住得 `4c > c + m`，即 **`3c > m`**：四个格子两条、六个格子**三条**。
+// 少一条就会从这条路溜过去——那时输出是 `readingOrder` 按 `center` 排的，
+// **看着也像对的**，但排的不是同一件事（本夹具少一条时正是如此，见下面的 `词数`）。
+// （顺带也钉住了「上下相邻的满宽行不许并排」：它们横向重叠，`sharesRow` 第 1 条当场出局。）
+
+// **页眉去斜之后，同一视觉行各段只差一个有符号的残差**：右列的 `top` 会比左列**更小**
+// （看着像更高）。只按 `top` 排就会读成 B A D C。选项格的几何逐字照抄 IMG_0006 第 1 题。
+//
+// 该并的那一对 `top` 差 0.005（半个矮盒高是 0.0087，够），不该并的那一对差 0.018（不够）
+// ——两组各落在一边。判据与尺度见 `TextLayout.sharesRow` / `orderedVertically`。
+let skewedOptionGrid = [
+    line("导语", x: 0.12, top: 0.600, width: 0.80),
+    line("B.", x: 0.544, top: 0.648, width: 0.314, height: 0.0282),
+    line("A.", x: 0.165, top: 0.653, width: 0.221, height: 0.0174),
+    line("D.", x: 0.543, top: 0.671, width: 0.320, height: 0.0319),
+    line("C.", x: 0.168, top: 0.677, width: 0.243, height: 0.0226),
+    line("结尾", x: 0.12, top: 0.720, width: 0.80),
+]
+expect(order(skewedOptionGrid), ["导语", "A.", "B.", "C.", "D.", "结尾"],
+       "右列 top 偏小的 2×2 选项格 → 仍按 A B C D 读（只比 top 会读成 B A D C）")
+
+// **表头 2×6**：六个格子的 `top` 铺开 0.008，比矮盒高的一半（0.0066）还大，
+// 所以「要求整簇一致」的判据收不住它（`词数` 会被挡在簇外，落到整行后面去）。
+// 几何照抄 IMG_0006 实测值。**三条满宽行**：按上面 `3c > m` 的算式，两条不够。
+let wideHeaderRow = [
+    line("上文", x: 0.12, top: 0.030, width: 0.80),
+    line("导语", x: 0.12, top: 0.050, width: 0.80),
+    line("文体", x: 0.209, top: 0.078, width: 0.033, height: 0.0131),
+    line("题材", x: 0.341, top: 0.081, width: 0.037, height: 0.0132),
+    line("词数", x: 0.479, top: 0.086, width: 0.035, height: 0.0132),
+    line("建议用时", x: 0.561, top: 0.084, width: 0.074, height: 0.0177),
+    line("实际用时", x: 0.665, top: 0.081, width: 0.075, height: 0.0200),
+    line("正确率", x: 0.781, top: 0.078, width: 0.060, height: 0.0187),
+    line("结尾", x: 0.12, top: 0.110, width: 0.80),
+]
+expect(order(wideHeaderRow),
+       ["上文", "导语", "文体", "题材", "词数", "建议用时", "实际用时", "正确率", "结尾"],
+       "2×6 表头 → 按列从左到右（成行判据只看挨着的两条；整簇一致会漏掉「词数」）")
+
+
 // MARK: - 分流（页边剔除 + 区带分隔）
 
 print("\n【分流】")
