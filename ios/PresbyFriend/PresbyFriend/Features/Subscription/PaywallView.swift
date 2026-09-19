@@ -3,8 +3,15 @@ import StoreKit
 
 struct PaywallView: View {
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var manager = SubscriptionManager()
+    /// **App 级的那个唯一实例**，不在这里新建。
+    ///
+    /// 原先这里是 `@StateObject private var manager = SubscriptionManager()`——sheet
+    /// 每弹一次就造一个新对象，于是「买了之后关掉付费墙，Pro 状态就没了」，而 App
+    /// 其他地方更是完全读不到用户是不是 Pro。见 `SubscriptionManager` 的文档。
+    @EnvironmentObject private var subscription: SubscriptionManager
     @State private var purchasing = false
+    /// 正在向 Apple 对账。期间禁用按钮——连点会叠起多次 `AppStore.sync()`。
+    @State private var restoring = false
     @State private var snackbarMessage: String?
 
     var body: some View {
@@ -22,7 +29,7 @@ struct PaywallView: View {
                     .foregroundColor(.secondary)
                     .padding(.horizontal)
 
-                if manager.products.isEmpty {
+                if subscription.products.isEmpty {
                     // Fallback pricing — products not yet configured in App Store Connect
                     fallbackPlanCard(
                         name: L10n.proMonthly,
@@ -36,11 +43,11 @@ struct PaywallView: View {
                     )
                 } else {
                     VStack(spacing: 12) {
-                        ForEach(manager.products) { product in
+                        ForEach(subscription.products) { product in
                             Button {
                                 purchasing = true
                                 Task {
-                                    if await manager.purchase(product) {
+                                    if await subscription.purchase(product) {
                                         dismiss()
                                     }
                                     purchasing = false
@@ -67,23 +74,40 @@ struct PaywallView: View {
                 }
 
                 Button {
+                    restoring = true
                     Task {
-                        if await manager.restorePurchases() {
+                        if await subscription.restorePurchases() {
+                            // ⚠️ **成功后不能立刻 `dismiss()`**：sheet 一关，这句
+                            // 「已恢复」就永远不会被渲染——用户做了正确的动作，
+                            // 却什么反馈都没看到。原先就是「先赋值再关」，等于没写。
+                            // 停一下让他读到，再关。
                             snackbarMessage = L10n.restoreSuccess
+                            try? await Task.sleep(nanoseconds: 1_800_000_000)
                             dismiss()
                         } else {
-                            snackbarMessage = L10n.restoreNoPurchases
+                            // 「没有购买」和「查询本身失败了」是两件事，不能都报
+                            // 「没找到购买记录」。失败时 `storeMessage` 里已经有原因，
+                            // 那一句由下面的提示条显示，这里就不覆盖它。
+                            snackbarMessage = subscription.storeMessage == nil
+                                ? L10n.restoreNoPurchases : nil
                         }
+                        restoring = false
                     }
                 } label: {
                     Text(L10n.restorePurchases)
                         .font(.body)
                 }
+                .disabled(restoring)
 
-                if let msg = snackbarMessage {
+                // 购买/恢复失败不再静默：`SubscriptionManager` 会把**已本地化**的一句话
+                // 放进 `storeMessage`，这里兜底显示。原先 `catch {}` 吞掉一切，用户点了
+                // 按钮什么都没发生，看上去就是「App 坏了」。
+                if let msg = snackbarMessage ?? subscription.storeMessage {
                     Text(msg)
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
                         .transition(.opacity)
                 }
             }
@@ -94,7 +118,7 @@ struct PaywallView: View {
                 }
             }
         }
-        .task { await manager.loadProducts() }
+        .task { await subscription.loadProducts() }
     }
 
     @ViewBuilder

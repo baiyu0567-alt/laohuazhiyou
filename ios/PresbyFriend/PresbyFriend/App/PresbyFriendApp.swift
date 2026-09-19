@@ -30,6 +30,12 @@ struct PresbyFriendApp: App {
     @StateObject private var settings = SettingsModel()
     @StateObject private var languageManager = LanguageManager.shared
 
+    /// 订阅与免费额度。**住在 App 层、且是单例**（`SubscriptionManager.shared`），
+    /// 和 `router` 同理：下面那道 `.id(languageManager.current)` 会重建整棵树，
+    /// 状态留在这里才活得下来。它此前只活在 `PaywallView` 里，付费墙一关就没了，
+    /// 于是 App 其他地方根本读不到用户是不是 Pro。
+    @StateObject private var subscription = SubscriptionManager.shared
+
     /// 「用户停在哪个 tab」。**它必须住在 `.id` 外面。**
     ///
     /// 下面 `ContentView` 挂着 `.id(languageManager.current)`——那道 `.id` 的用途是
@@ -46,11 +52,16 @@ struct PresbyFriendApp: App {
         WindowGroup {
             ContentView(router: router)
                 .environmentObject(settings)
+                .environmentObject(subscription)
                 .id(languageManager.current)  // Force reload on language change
                 .onAppear {
                     Bundle.enableLanguageSwitching()
                     settings.load()
                     languageManager.current = settings.language
+                    // 首次校验权益 + 挂上 `Transaction.updates`。**必须在启动早期**：
+                    // 续订、退款、家庭共享、在别的设备上购买都只经那条流回来。
+                    // `start()` 自带幂等闸，`.id` 重建时这里会再响一次，不会重复挂。
+                    subscription.start()
                 }
                 .onOpenURL { settings.pendingURL = $0 }
                 .onChange(of: settings.language) { lang in
@@ -171,6 +182,11 @@ struct ContentView: View {
         }
         .alert(L10n.urlExtractFail, isPresented: $showingURLExtractError) {
             Button(L10n.close, role: .cancel) {}
+        }
+        // 免费额度用完时由 `ReaderLaunchCoordinator` 置位。付费墙挂在**阅读页之外**：
+        // 阅读页是盖住 `TabView` 的一层 ZStack、不是 sheet，从它里面没法弹。
+        .sheet(isPresented: $coordinator.paywallRequested) {
+            PaywallView()
         }
         .environmentObject(coordinator)
         .task {

@@ -45,6 +45,15 @@ enum L10n {
     static var restoreSuccess: String { NSLocalizedString("restore_success", comment: "") }
     static var restoreNoPurchases: String { NSLocalizedString("restore_no_purchases", comment: "") }
     static var playStoreComing: String { NSLocalizedString("play_store_coming", comment: "") }
+    /// 购买或恢复**失败**的提示。
+    ///
+    /// 存在的理由：不能把 `error.localizedDescription` 直接上屏——那是系统英文原文
+    /// （`The operation couldn't be completed. (StoreKit.StoreKitError error 2.)`），
+    /// 在一个只有 6 种语言的 App 里，用户看到的就是一行乱码。原文送日志，屏上留这句。
+    static var storeError: String { NSLocalizedString("store_error", comment: "") }
+    /// 交易处于 `.pending`（Ask to Buy 等家人批准）。**不是失败，也不是成功**——
+    /// 说「已解锁」是假的（此刻 `currentEntitlements` 里没有它），一句不说又像卡住了。
+    static var purchasePending: String { NSLocalizedString("purchase_pending", comment: "") }
     static var close: String { NSLocalizedString("close", comment: "") }
     static var noSharedContent: String { NSLocalizedString("no_shared_content", comment: "") }
     static var showControls: String { NSLocalizedString("show_controls", comment: "") }

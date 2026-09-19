@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var settings: SettingsModel
+    @EnvironmentObject var subscription: SubscriptionManager
     @StateObject private var vm = SettingsViewModel()
     @State private var showResetAlert = false
     @State private var showPaywall = false
@@ -149,15 +150,20 @@ struct SettingsView: View {
                     .font(bodyFont)
                 }
 
-                Section {
-                    Button {
-                        showPaywall = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "crown.fill").foregroundColor(.orange)
-                                .font(.title2)
-                            Text(L10n.upgradePro)
-                                .font(labelFont)
+                // 已经是 Pro 就不再摆这个入口——对齐 Android `SettingsScreen.kt:179`
+                // 的 `if (!isPro)`。留着它，付过费的用户点进去只会看到一张劝他付费的
+                // 付费墙，那是**当面说错话**：钱已经付了。
+                if !subscription.isProSubscriber {
+                    Section {
+                        Button {
+                            showPaywall = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "crown.fill").foregroundColor(.orange)
+                                    .font(.title2)
+                                Text(L10n.upgradePro)
+                                    .font(labelFont)
+                            }
                         }
                     }
                 }

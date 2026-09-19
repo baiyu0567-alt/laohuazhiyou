@@ -47,11 +47,29 @@
 			);
 			target = 04788A9D2FEA482800EDB3E1 /* shareextention */;
 		};
+		04788AB12FEA482800EDB3E1 /* Exceptions for "PresbyFriend" folder in "PresbyFriend" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				PresbyFriend.storekit,
+			);
+			target = 047889FD2FEA440800EDB3E1 /* PresbyFriend */;
+		};
+		04788AB22FEA482800EDB3E1 /* Exceptions for "PresbyFriend" folder in "shareextention" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				PresbyFriend.storekit,
+			);
+			target = 04788A9D2FEA482800EDB3E1 /* shareextention */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		04788A002FEA440800EDB3E1 /* PresbyFriend */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				04788AB12FEA482800EDB3E1 /* Exceptions for "PresbyFriend" folder in "PresbyFriend" target */,
+				04788AB22FEA482800EDB3E1 /* Exceptions for "PresbyFriend" folder in "shareextention" target */,
+			);
 			path = PresbyFriend;
 			sourceTree = "<group>";
 		};

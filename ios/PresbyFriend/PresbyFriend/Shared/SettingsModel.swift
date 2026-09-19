@@ -68,6 +68,11 @@ final class SettingsModel: ObservableObject {
         }
     }
 
+    /// 只重置**外观与识别**这几项，刻意不含订阅状态。
+    ///
+    /// 订阅那边的键（`isProCached` / `dailyUseCount` / `lastUseDate`，见
+    /// `SubscriptionManager`）与这里用的键**不相交**，所以「重置设置」不会把已付费的
+    /// 用户打回免费——那会是让用户白花钱。将来往 `save()` 里加键时留意这条。
     func reset() {
         fontSize = 40
         theme = .dark

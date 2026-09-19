@@ -46,6 +46,7 @@
 "pro_yearly" = "PresbyFriend Pro Annuel";
 "pro_yearly_desc" = "Meilleur rapport qualité-prix — économisez 40 % avec le plan annuel";
 "pro_yearly_price" = "19,99 €/an";
+"purchase_pending" = "Votre achat est en attente d'approbation. Pro sera activé après validation.";
 "read_aloud" = "Lire à voix haute";
 "read_tab" = "Lire";
 "reading_mode" = "Mode lecture";
@@ -60,6 +61,7 @@
 "show_controls" = "Afficher les contrôles";
 "shutter" = "Capturer";
 "stop_reading" = "Arrêter";
+"store_error" = "Une erreur s'est produite avec l'App Store. Veuillez réessayer.";
 "theme_dark" = "Sombre";
 "theme_label" = "Thème";
 "theme_sepia" = "Sépia";

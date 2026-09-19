@@ -72,6 +72,13 @@ final class ReaderLaunchCoordinator: ObservableObject {
     /// 识别语言可能不对。nil = 不显示。判定见 `hint(for:failed:)`。
     @Published var languageHint: LanguageHint?
 
+    /// 免费额度用完，请求弹付费墙。由 `ContentView` 挂 `.sheet` 消费。
+    ///
+    /// 为什么是「请求」而不是在这里直接弹：阅读页本身是盖住 `TabView` 的一层
+    /// ZStack（`PresbyFriendApp.swift` 的 `coordinator.isPresenting` 那段），不是
+    /// sheet，从它内部弹不出东西来。付费墙必须挂在视图树**外面**那一层。
+    @Published var paywallRequested = false
+
     private let ocr = TextRecognitionService()
 
     /// 这次 OCR 实际递给 Vision 的整个语言数组。判定「认出来的文字像不像我们递交的语言」
@@ -110,6 +117,13 @@ final class ReaderLaunchCoordinator: ObservableObject {
     func open(text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+
+        // 额度闸。位置在**最前面**：超额时连状态都不该动，更不该打开阅读页。
+        // 计数放在最后（真正呈现的那一刻）——「查了但没呈现」不扣次数。
+        guard SubscriptionManager.shared.canUseToday else {
+            paywallRequested = true
+            return
+        }
         // 文本直接有了，不需要等 OCR：作废在途的那次，别让它回来覆盖。
         generation += 1
         isPreparing = false
@@ -120,9 +134,17 @@ final class ReaderLaunchCoordinator: ObservableObject {
         fallbackImage = nil
         self.text = trimmed
         isPresenting = true
+        SubscriptionManager.shared.recordUse()
     }
 
     func open(image source: OCRImageSource) async {
+        // 额度闸在 `recognize` **之前**：首次识别实测要 28–34s，超额就不该白跑那一趟。
+        // （Android 同序：`PresbyFriendAccessibilityService.onButtonTap` 先查后截图。）
+        guard SubscriptionManager.shared.canUseToday else {
+            paywallRequested = true
+            return
+        }
+
         generation += 1
         let token = generation
 
@@ -187,6 +209,9 @@ final class ReaderLaunchCoordinator: ObservableObject {
             fallbackImage = source
         }
         isPresenting = true
+        // 计数在这一刻（真正呈现），不在入口那一刻。上面那道 `guard token == generation`
+        // 已经把被后来者顶掉的那次拦在外面了——用户没拿到内容，不该扣他一次。
+        SubscriptionManager.shared.recordUse()
     }
 
     /// 「识别语言可能选错了」要不要提示。两条判据，**一主一兜底**。

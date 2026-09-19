@@ -146,6 +146,23 @@ struct ShareView: View {
                 preference: settings.recognitionLanguage,
                 supported: OCRSupportedLanguageCodes.all))
 
+        // ⚠️ **分享扩展这条路径有意不设免费额度闸**，这是已知行为，不是漏掉的 bug。
+        //
+        // 三条理由，缺一条都不成立：
+        //  1. 扩展里**卖不了东西**。`Product.purchase()` 需要 UI 场景锚点，在 app
+        //     extension 里会以 "Could not find a UI anchor for … purchase." 失败。
+        //     所以在这里拦下用户是条死路：既不能买也不能恢复，只能把人赶走。
+        //  2. Android 侧同样没闸。那边 `canUseToday()` 只出现在
+        //     `PresbyFriendAccessibilityService` 一处；`ACTION_SEND` / `ACTION_PROCESS_TEXT`
+        //     直达阅读页，不计数。扩展就是 iOS 的 `ACTION_SEND` 面，对齐即不设闸。
+        //  3. 本分支（`device-test-noshare`）App Group 是关掉的，扩展读不到 App 的
+        //     `UserDefaults`，额度与 Pro 状态一条都拿不到。硬要设闸只能改成「扩展只计数
+        //     不提示」——那是让用户**静默丢额度**，比不计数更坏。
+        //
+        // 后果写清楚：用户可以把图片分享给扩展、无限制地阅读，绕过每日 10 次。
+        // 将来要堵，需要同时满足「App Group 恢复」+「扩展里放一个只读的『已到今日上限，
+        // 请打开 App』面板」，属于独立需求。
+        //
         // 这里不能再用 `try?`：它把 Vision 的抛错折成 `[]`，和「这张图真的没有文字」
         // 撞成同一个值，于是识别失败会被当成空结果报给用户。两种结果必须留下
         // 不同的痕迹——和 ReaderLaunchCoordinator 里 Task 7 的修法一致。
