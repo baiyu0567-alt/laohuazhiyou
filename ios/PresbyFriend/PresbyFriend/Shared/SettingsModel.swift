@@ -14,7 +14,7 @@ final class SettingsModel: ObservableObject {
     /// Set by the main app when a URL is opened from another app. Reset to nil after handling.
     @Published var pendingURL: URL?
 
-    private let defaults = UserDefaults(suiteName: "group.com.presbyfriend")!
+    private let defaults = UserDefaults(suiteName: "group.35MJ76582H.com.presbyfriend")!
     private let cloudStore = NSUbiquitousKeyValueStore.default
 
     func load() {
