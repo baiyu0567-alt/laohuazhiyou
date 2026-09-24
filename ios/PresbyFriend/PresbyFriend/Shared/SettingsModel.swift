@@ -15,7 +15,29 @@ final class SettingsModel: ObservableObject {
     @Published var pendingURL: URL?
 
     private let defaults = UserDefaults(suiteName: "group.35MJ76582H.com.presbyfriend")!
-    private let cloudStore = NSUbiquitousKeyValueStore.default
+
+    /// iCloud 键值存储**不是无条件可用的**：它要求 App 签了
+    /// `com.apple.developer.ubiquity-kvstore-identifier`。
+    ///
+    /// 本工程两份 entitlements（app 与扩展）都**只有 App Group，没有这一项**，于是
+    /// `NSUbiquitousKeyValueStore.default` 只要被碰到就往控制台吐
+    /// `BUG IN CLIENT OF KVS: Trying to initialize NSUbiquitousKeyValueStore without a store identifier`
+    /// ——2026-09-23 真机跑出来的就是这条。它不崩，但「设置云同步」这件事**根本不存在**。
+    ///
+    /// 所以先查权限再决定碰不碰。注意这里**不能**改成 `lazy var` 了事：那只是把同一条抱怨
+    /// 从启动推迟到第一次 `save()`，功能一样是假的。
+    ///
+    /// 将来在开发者后台给 App ID 开 iCloud 并补上该 entitlement 后，这里会自动开始工作，
+    /// 不需要再改代码。
+    private static let cloudStore: NSUbiquitousKeyValueStore? = {
+        // 判据用 `ubiquityIdentityToken`：没签 iCloud entitlement、或用户没登录 iCloud，
+        // 它都返回 nil，而这两种情况下 KVS 本来也用不了，跳过就对了。
+        //
+        // **不要**换成 `SecTaskCopyValueForEntitlement` ——SecTask 那一套只在 macOS 上有，
+        // iOS 上连符号都找不到（实测两个 target 都是 `cannot find in scope`）。
+        guard FileManager.default.ubiquityIdentityToken != nil else { return nil }
+        return .default
+    }()
 
     func load() {
         fontSize = defaults.cgFloat(forKey: "fontSize") ?? 40
@@ -51,6 +73,7 @@ final class SettingsModel: ObservableObject {
     }
 
     private func syncToCloud() {
+        guard let cloudStore = Self.cloudStore else { return }
         cloudStore.set(fontSize, forKey: "fontSize")
         cloudStore.set(theme.rawValue, forKey: "theme")
         cloudStore.set(lineHeight, forKey: "lineHeight")
@@ -58,7 +81,15 @@ final class SettingsModel: ObservableObject {
         cloudStore.synchronize()
     }
 
+    /// ⚠️ **这条目前即使云同步可用也是无效的**：回调里只调 `load()`，而 `load()` 读的是
+    /// 本地 `defaults`（App Group），**不是 `cloudStore`**。也就是说别的设备改过来的值
+    /// 不会经这里落到本机——这个通知白挂。
+    ///
+    /// 没顺手改，是因为「云端的值和本机刚改的值谁赢」是个要定的策略（离线改过之后
+    /// 再收到云变更，直接采用云端＝丢掉用户刚做的设置），不属于缺陷修复的范围。
+    /// 等 entitlement 补上、这条路真的跑起来时再定。
     func listenForCloudChanges() {
+        guard let cloudStore = Self.cloudStore else { return }
         NotificationCenter.default.addObserver(
             forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
             object: cloudStore,
