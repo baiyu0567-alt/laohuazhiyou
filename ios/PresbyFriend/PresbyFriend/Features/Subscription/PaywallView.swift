@@ -29,7 +29,15 @@ struct PaywallView: View {
                     .foregroundColor(.secondary)
                     .padding(.horizontal)
 
-                if subscription.products.isEmpty {
+                if !subscription.isProductsLoaded {
+                    // 「还在查」不能和「查过了，一条商品都没有」共用一张脸。首帧渲染
+                    // 发生在 `.task` 之前，所以这里不加这一支的话，每一次打开付费墙
+                    // 都会先亮出两张写死的兜底价签再被真商品换掉——最坏的情况是把
+                    // 假价格当成真的给用户看了一瞬。
+                    ProgressView()
+                        .controlSize(.large)
+                        .padding(.vertical, 40)
+                } else if subscription.products.isEmpty {
                     // Fallback pricing — products not yet configured in App Store Connect
                     fallbackPlanCard(
                         name: L10n.proMonthly,
@@ -118,7 +126,18 @@ struct PaywallView: View {
                 }
             }
         }
-        .task { await subscription.loadProducts() }
+        .task {
+            // **上一次弹出的结论不带到这一次。** `storeMessage` 是 App 级的、跨弹出留存
+            // （单例），而下面那条提示条是 `snackbarMessage ?? subscription.storeMessage`
+            // ——不清的话，用户上一次买失败之后，这一次只是把付费墙打开、什么都没做，
+            // 屏幕上就先摆着一句「购买失败，请稍后再试」。那是在对一个什么都没做的人
+            // 报错。
+            //
+            // 清在 `loadProducts()` **之前**：它自己失败时会往里写新的一句，
+            // 顺序反过来就把新的那句一起清掉了。
+            subscription.storeMessage = nil
+            await subscription.loadProducts()
+        }
     }
 
     @ViewBuilder

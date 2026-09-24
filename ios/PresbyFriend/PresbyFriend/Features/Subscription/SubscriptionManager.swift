@@ -34,6 +34,18 @@ final class SubscriptionManager: ObservableObject {
 
     @Published private(set) var products: [Product] = []
 
+    /// 商品列表**查过一次**了没有（无论查成什么样）。
+    ///
+    /// **没有它，`products.isEmpty` 一个值要同时表示三件事**：「还在查」「查过了，
+    /// 一条都没有」「查询本身失败了」。而付费墙的首帧渲染发生在 `.task` 之前，于是
+    /// 这三种情况用户**第一眼看到的都是那两张写死的兜底价签**（$2.99 / $19.99），
+    /// 真商品查回来之后才被换掉——一次看得见的跳变，且「真没配」和「正在加载」
+    /// 长得一模一样。
+    ///
+    /// 「查询失败」那一态由 `storeMessage` 另外分开（失败时会写 `L10n.storeError`），
+    /// 所以这三态两两可分。
+    @Published private(set) var isProductsLoaded = false
+
     /// 最近一次购买/恢复**要告诉用户的那句话**，已经本地化。nil = 没话可说。
     ///
     /// 为什么不是「错误原文」：原先这里是 `error.localizedDescription`，那串是**系统英文**
@@ -95,6 +107,10 @@ final class SubscriptionManager: ObservableObject {
     // MARK: - 商品
 
     func loadProducts() async {
+        // 重新查就先把这个标志放下，界面该显示「正在查」而不是上一次的结果。
+        // `products` **不清**：这一趟查失败时，上一次那份仍然是有效的、可购买的，
+        // 清了等于把用户手里的东西收走。
+        isProductsLoaded = false
         do {
             // **按 `productIDs` 的顺序重排**：`Product.products(for:)` 不保证返回顺序，
             // 直接渲染的话付费墙上的月付/年付可能这次在上、下次在下——同一屏内容换位置，
@@ -120,6 +136,9 @@ final class SubscriptionManager: ObservableObject {
             Self.logger.error("载入商品失败: \(error, privacy: .public)")
             storeMessage = L10n.storeError
         }
+        // 两条路都要置：这个标志说的是「查过一次了」，不是「查成功了」。
+        // 它只置于失败分支，界面就会永远停在转圈上。
+        isProductsLoaded = true
     }
 
     // MARK: - 购买 / 恢复

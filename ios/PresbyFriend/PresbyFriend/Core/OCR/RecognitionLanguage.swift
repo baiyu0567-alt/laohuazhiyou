@@ -51,16 +51,27 @@ enum RecognitionLanguage: Hashable {
     /// 只是实现只认中文。接到新实现上之后，中文设备照旧得到中文，德语设备从「英文」
     /// 修正为「德语」——那是修好，不是改变。
     ///
-    /// - Parameters:
-    ///   - raw: `UserDefaults` 里的原始字符串。可为 nil。
-    ///   - supported: 本机 Vision 支持的码。这里只用它**校验来路不明的码**——直接存成
-    ///     语言码的那一支（`"ja-JP"` 这种）认不出来就返回 nil，免得把一个本机不存在的
-    ///     码固化下来。上面那批**固定档位名不查它**（`"german"` 恒给 `"de-DE"`）：它们
-    ///     来路明确，是本 App 自己写进去的，而「这台设备能不能用这个码」是**使用那一刻**
-    ///     的属性，由 `visionLanguages` 兜底。在这里查的代价是——用户明选过德语，却因为
-    ///     此刻查不到清单而被改写成「跟随系统」，正是本函数要避免的那种静默重置。
+    /// **这一层不判断「本机能不能用这个码」——只看它长得像不像一个语言码。**
+    /// 曾经它拿 `supported.contains(raw)` 把关，理由是「一个本机识别不了的档位等于把
+    /// 『语言选错』固化下来」。那条理由本身对，**放在这里错了两处**：
+    ///
+    /// 1. **可用性是使用那一刻的属性，不是存储那一刻的。** 真正递码给 Vision 的地方是
+    ///    `visionLanguages`，它自己有一道 `supported.contains` 兜底（落回 `en-US`）；
+    ///    设置页的选项列表也专门为「值不在清单里」把当前这一档补进去显示
+    ///    （`SettingsView.supportedLanguageCodes`）。两处都已经处理好了这件事。
+    /// 2. **代价是静默销毁用户的选择，而且不可逆。** `load()` 读出 `.followSystem` 之后，
+    ///    设置页一 `onDisappear` 就 `save()`，把存储值**改写**成 `"followSystem"`——
+    ///    用户选过的日语不是「这次没显示出来」，是被覆盖掉了。触发条件不需要出错：
+    ///    清单查询失败会退化成 `["en-US"]`（见 `OCRSupportedLanguageCodes.all`），系统升级
+    ///    后 Vision 撤掉某个码也一样。这正是下面「固定档位名不查它」那一段要避免的事，
+    ///    而它当时只保护了旧档位名，**没保护本版及以后写进去的码**——那条路上的用户更多。
+    ///
+    /// 所以改判形状。`"garbage"` 这种来路不明的值仍然被挡掉（它连形状都不是），
+    /// 而 `"is-IS"` 这种「是真码、只是本机没有」的值会原样留下来。
+    ///
+    /// - Parameter raw: `UserDefaults` 里的原始字符串。可为 nil。
     /// - Returns: 认不出来时返回 nil。
-    static func stored(from raw: String?, supported: [String]) -> RecognitionLanguage? {
+    static func stored(from raw: String?) -> RecognitionLanguage? {
         guard let raw else { return nil }
         switch raw {
         case "followSystem", "system", "followApp": return .followSystem
@@ -72,8 +83,18 @@ enum RecognitionLanguage: Hashable {
         case "spanish":                             return .manual("es-ES")
         case "italian":                             return .manual("it-IT")
         case "portuguese":                          return .manual("pt-BR")
-        default:                                    return supported.contains(raw) ? .manual(raw) : nil
+        default:                                    return looksLikeLanguageCode(raw) ? .manual(raw) : nil
         }
+    }
+
+    /// 这个字符串**长得像**一个 BCP-47 语言码吗（`ja-JP`、`zh-Hans`、`sr-Latn-RS`）。
+    ///
+    /// 只查形状，不查本机 Vision 支不支持——理由见 `stored(from:)`。
+    /// 语言部分是 2–3 个字母，后面每一段是 2–8 个字母或数字。
+    /// 单段（`"garbage"`）落在这之外，所以「认不出来」仍然是认不出来。
+    private static func looksLikeLanguageCode(_ raw: String) -> Bool {
+        raw.range(of: "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                  options: .regularExpression) != nil
     }
 
     // MARK: - 构造 Vision 的语言数组

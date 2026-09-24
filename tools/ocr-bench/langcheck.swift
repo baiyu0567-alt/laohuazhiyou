@@ -39,8 +39,8 @@ func system(_ device: String?, _ list: [String] = supported) -> String {
     RecognitionLanguage.systemLanguageCode(deviceLanguageCode: device, supported: list)
 }
 
-func stored(_ raw: String?, _ list: [String] = supported) -> RecognitionLanguage? {
-    RecognitionLanguage.stored(from: raw, supported: list)
+func stored(_ raw: String?) -> RecognitionLanguage? {
+    RecognitionLanguage.stored(from: raw)
 }
 
 // MARK: - 设备语言 → Vision 码
@@ -156,15 +156,20 @@ expect(stored("portuguese"),         .manual("pt-BR"),   "迁移/portuguese")
 expect(stored("ja-JP"),   .manual("ja-JP"),   "迁移/直接码 ja-JP")
 expect(stored("zh-Hant"), .manual("zh-Hant"), "迁移/直接码 zh-Hant")
 
-// 来路不明的码，清单里没有就不认，由调用方给默认值。
-expect(stored("is-IS"),   nil, "迁移/本机不支持的码")
-expect(stored("garbage"), nil, "迁移/认不出来")
+// **本机不支持的码照样留下。** 这里曾经拿 `supported.contains(raw)` 把关，理由是
+// 「免得把一个本机不存在的码固化下来」——代价却是把**用户选过的那一档**改写成
+// 「跟随系统」，而 `SettingsView.onDisappear` 会紧接着 `save()`，把它**永久覆盖掉**。
+// 触发不需要出错：清单查询失败会退化成 `["en-US"]`，系统升级后 Vision 撤掉某个码也一样。
+// 可用性是**使用那一刻**的设备属性，由 `visionLanguages` 兜底（下面第二行）。
+expect(stored("is-IS"),   .manual("is-IS"), "迁移/本机不支持的真码要留下")
+expect(langs(.manual("is-IS")), ["en-US"], "……但真用它的时候会落回英文")
 
-// 旧档位名**不查** `supported`：它来路明确（那组名字是本 App 自己写进去的），能不能用是
-// **使用那一刻**的设备属性，由 `visionLanguages` 兜底（下面第二行）。
-// 在这里查的话，「用户选过德语」会变成「跟随系统」——那正是这一段要避免的静默重置。
-expect(stored("german", ["en-US"]), .manual("de-DE"), "旧档位名不看 supported")
-expect(langs(.manual("de-DE"), ["en-US"]), ["en-US"], "……但真用它的时候会落回英文")
+// 而「根本不是一个语言码」仍然不认：形状就不对，由调用方给默认值。
+expect(stored("garbage"), nil, "迁移/认不出来")
+expect(stored(""),        nil, "迁移/空串")
+// 形状规则的边界：语言部分是 2–3 个字母，后面可有若干段。裸 `ja` 算码，
+// 单段的 `garbage` 不算——判据是**形状**，不是本机有没有。
+expect(stored("ja"),      .manual("ja"), "迁移/裸语言码（形状够）")
 
 // MARK: - 往返：清单里每个码都要存得下、读得回、并且真的喂给 Vision
 

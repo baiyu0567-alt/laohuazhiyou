@@ -51,14 +51,15 @@ final class SettingsModel: ObservableObject {
         // 不是在读设置时算一次冻住。所以在用户动过这项设置之前，改设备语言是会生效的；
         // 一旦进过设置页（`SettingsView.onDisappear` 会 `save()`），就以用户的选择为准。
         //
-        // 旧分支写下的档位名（`system`/`chinese`/`english`…）由 `stored(from:supported:)`
+        // 旧分支写下的档位名（`system`/`chinese`/`english`…）由 `stored(from:)`
         // 映射过来，不会因为改了档位名就被静默重置。
         //
-        // `supported` 要传：一个本机识别不了的档位等于把「语言选错」固化下来，
-        // 所以认不出来的存储值一律返回 nil，落到默认档。
+        // **这里不传本机支持清单**：可用性是**使用那一刻**的设备属性，由
+        // `RecognitionLanguage.visionLanguages` 兜底；在读取时按清单把关，会在清单查询失败
+        // 时把用户选过的那一档改写成「跟随系统」，而设置页一 `save()` 就把它永久覆盖掉
+        // （`SettingsView.onDisappear`）。理由完整写在 `stored(from:)` 的文档里。
         recognitionLanguage = RecognitionLanguage.stored(
-            from: defaults.string(forKey: "recognitionLanguage"),
-            supported: OCRSupportedLanguageCodes.all) ?? .followSystem
+            from: defaults.string(forKey: "recognitionLanguage")) ?? .followSystem
     }
 
     func save() {

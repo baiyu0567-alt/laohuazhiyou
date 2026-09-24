@@ -175,6 +175,14 @@ final class MagnifierViewModel: NSObject, ObservableObject {
                     guard let self else { return }
                     if !running { self.sessionGeneration += 1 }
                     self.isSessionRunning = running
+                    // 会话真的跑起来了，之前记下的错误就是**过期的**，必须清掉。
+                    //
+                    // 不清的后果不是「留一句多余的提示」：`MagnifierView` 里那条错误分支
+                    // 排在预览分支**之前**（理由见那里的注释），于是「起失败过、后来起成了」
+                    // 会变成一块再也退不出去的报错界面——画面就在下面而用户看不到。
+                    // 清在这里而不是 `startSession()` 开头：只有「真的跑起来了」才谈得上
+                    // 上一次的错误已经作废，开头清等于自己把正在发生的失败抹掉。
+                    if running { self.cameraError = nil }
                 }
             })
         }

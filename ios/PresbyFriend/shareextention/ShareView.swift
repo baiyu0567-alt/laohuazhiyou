@@ -210,7 +210,14 @@ struct ShareView: View {
                 error = L10n.urlExtractFail
             }
         } catch {
-            self.error = error.localizedDescription
+            // **不能上屏系统原文。** 这里原先是 `error.localizedDescription`，而那串是
+            // `URLExtractor.Error` 里写死的英文，或 Foundation 自己的英文
+            // （`The operation couldn't be completed…`）——本 App 只有 6 种语言，它哪一种
+            // 都不是。这个扩展里其它每一条文案都走 `L10n`，只有这一处漏了。
+            // 顺带把 `URLExtractor` 的 `LocalizedError` 一致性也去掉了，理由见那里。
+            // 这里必须写 `self.error`：`error` 这个名字在 `catch` 块里被捕获的那个错误
+            // 占着，写 `error = …` 是给一个不可变绑定赋值。
+            self.error = L10n.urlExtractFail
         }
     }
 

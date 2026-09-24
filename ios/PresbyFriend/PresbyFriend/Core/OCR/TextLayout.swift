@@ -236,13 +236,25 @@ enum TextLayout {
                      lines.filter { $0.minX >= gutter.end }]
 
         // 先看有没有哪一侧**整条**都不是栏，而是一条页边残字——那一侧整条丢掉。
-        if let sliver = sliverSide(sides) { return lines.filter { !sliver.contains($0) } }
+        //
+        // **丢掉它不等于可以收工。** 这一支原先写完就 `return`，于是另一侧（通常是正文
+        // 那一栏）自己贴页边的残字**一条都清不掉**——那是 `pageEdge` 的活，与另一侧
+        // 是不是残条毫无关系。真机那张英语卷子（IMG_0004，右缘一列手写旁注）走的正是
+        // 这条路：右缘被丢掉之后左栏原样返回。两件事并成一次删除，各自独立判。
+        //
+        // **这次改动在四张标定照片上是惰性的。** 前后跑 `paracheck`，段落逐条相同
+        // （IMG_0002 10 段 / IMG_0003 15 段 / IMG_0004 44 段 / IMG_0006 40 段）。
+        // IMG_0004 确实走进了新路径——左栏 46 行被送进 `pageEdge`——但那一侧没有它
+        // 认得出的残字，于是删掉的是空集。也就是说这四张证明的是**不坏**，不是**有用**。
+        // 要正面验证得造一张「一侧是残条、且另一侧自己也贴页边有残渣」的页。
+        let sliverIndex = sliverSideIndex(sides)
+        var dropped: [TextLine] = sliverIndex.map { sides[$0] } ?? []
 
-        let dropped = sides.flatMap { side -> [TextLine] in
+        for (index, side) in sides.enumerated() where index != sliverIndex {
             // 只对**单栏**的一侧动手。那一侧要是自己还能切出栏来，说明它不是一条正文
             // 栏（可能是另一组并排的栏），「中位数 = 正文边缘」这句话就不成立了。
-            guard verticalGutters(in: side).isEmpty else { return [] }
-            return pageEdge(in: side)
+            guard verticalGutters(in: side).isEmpty else { continue }
+            dropped.append(contentsOf: pageEdge(in: side))
         }
         guard !dropped.isEmpty else { return lines }
         return lines.filter { !dropped.contains($0) }
@@ -271,7 +283,11 @@ enum TextLayout {
     /// IMG_0003 那一行说明**为什么非要两条同时**：它的左栏比右栏窄三分之一
     /// （0.317 对 0.465，比值 0.68），只比阈值 0.5 高一点点——单看跨度它险些被误杀，
     /// 是「行数相当」这一条把它保下来的。
-    private static func sliverSide(_ sides: [[TextLine]]) -> [TextLine]? {
+    ///
+    /// - Returns: 残条那一侧在 `sides` 里的下标；两侧都像栏、或某一侧是空的时候返回 nil。
+    ///   返回**下标**而不是那一侧的行，是为了让调用方能说清楚「**除了**它以外的那一侧」
+    ///   ——去掉残条之后，剩下那一侧还要接着做 `pageEdge`（见 `pageBody`）。
+    private static func sliverSideIndex(_ sides: [[TextLine]]) -> Int? {
         guard sides.count == 2, !sides[0].isEmpty, !sides[1].isEmpty else { return nil }
         func extent(_ side: [TextLine]) -> Double {
             guard let lo = side.map(\.minX).min(), let hi = side.map(\.maxX).max() else { return 0 }
@@ -280,7 +296,7 @@ enum TextLayout {
         for (a, b) in [(1, 0), (0, 1)] {
             let narrow = extent(sides[a]) < extent(sides[b]) * sliverFraction
             let few = Double(sides[a].count) < Double(sides[b].count) * sliverFraction
-            if narrow && few { return sides[a] }
+            if narrow && few { return a }
         }
         return nil
     }
@@ -1308,7 +1324,7 @@ enum TextLayout {
 
     /// 一侧的**跨度**和**行数**都不到另一侧的这个比例时，它不是栏，是页边的一条残字。
     ///
-    /// 两条要同时成立，理由和实测见 `sliverSide`：单独任何一条都会误杀一种正常版式
+    /// 两条要同时成立，理由和实测见 `sliverSideIndex`：单独任何一条都会误杀一种正常版式
     /// （窄栏 / 短栏）。三张真机照片上，残条是 0.08 和 0.25，真栏是 0.68 和 0.96——
     /// 0.5 落在中间，两侧各留 1.9 倍和 2 倍的余量。
     static let sliverFraction = 0.5

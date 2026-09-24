@@ -41,6 +41,23 @@ struct MagnifierView: View {
                     Spacer()
                 }
                 .padding()
+            } else if let error = vm.cameraError {
+                // **这一支必须排在 `cameraAccessGranted` 之前。** `cameraError` 有三个写入点，
+                // 其中一个是「**已经授权**、但会话起不来」（`startSession()` 里
+                // `AVCaptureDeviceInput` 构造抛错，`MagnifierViewModel.swift:278`）。
+                // 排在授权分支后面时那一支永远显示不到：`cameraAccessGranted` 已经是真，
+                // 于是走预览分支——而会话根本没跑，画面是黑的、快门是灰的、**一个字都没有**。
+                // 用户看到的是「这个功能坏了」，不是「相机出错了」。
+                //
+                // 前提是 `cameraError` 会在会话真的跑起来时被清掉，否则它会变成一个
+                // 再也退不出去的界面（见 `observeSessionState()` 里那一手）。
+                VStack(spacing: 16) {
+                    Image(systemName: "camera.fill").font(.system(size: 48))
+                    Text(error)
+                        .font(.title3)
+                        .multilineTextAlignment(.center)
+                }
+                .padding()
             } else if vm.cameraAccessGranted {
                 // 预览。这里曾经叠着一层 `DataScannerViewController`（VisionKit 的实时文字），
                 // 它自带一套 `AVCaptureSession`，和我们的会话抢同一颗后置摄像头。真机日志里
@@ -119,14 +136,6 @@ struct MagnifierView: View {
                 }
                 .padding(.bottom, 40)
                 .padding(.horizontal)
-            } else if let error = vm.cameraError {
-                VStack(spacing: 16) {
-                    Image(systemName: "camera.fill").font(.system(size: 48))
-                    Text(error)
-                        .font(.title3)
-                        .multilineTextAlignment(.center)
-                }
-                .padding()
             } else {
                 ProgressView()
             }
@@ -246,23 +255,37 @@ final class CameraPreviewView: UIView {
         applyInterfaceOrientation()
     }
 
-    /// 把「界面现在朝哪边」写进预览连接。
+    /// 把「界面现在朝哪边」写进这个会话的**所有**采集连接。
     ///
     /// 没有这一步，连接就停在 AVFoundation 自己的默认方向（竖屏）上。真机上量到的
     /// 就是这条：界面已经横过来了，连接的 `videoOrientation` 还是 `1`（竖屏）。于是
     /// 传感器画面照竖屏摆，**整幅画面转 90°**，而 `videoGravity = .resizeAspectFill`
     /// 又按错的方向去裁切，横竖屏看到的范围因此也不一样。
     ///
+    /// **照片输出那条连接同样要写，别只写预览这条。** `AVCapturePhotoOutput` 用
+    /// **EXIF 标签**表达方向，`AVCaptureSession.h:1085` 的原话是 "In the
+    /// AVCapturePhotoOutput, orientation is handled using Exif tags"——连接上写的是哪个
+    /// 方向，拍出来的 JPEG 就带哪个 EXIF。这条连接此前**全仓没有任何写入点**
+    /// （`videoOrientation` 只出现在本函数里），于是横屏拍下的照片一律带着「竖屏」的
+    /// 标签，凡是照标签摆图的读者都会把它转 90°——本 App 里就是「没认出文字时兜底
+    /// 显示原图」那条路（`ReaderLaunchCoordinator.fallbackImage`）。
+    ///
+    /// 预览层**不在** `session.outputs` 里（它是 `CALayer` 而不是 `AVCaptureOutput`，
+    /// 见 `AVCaptureVideoPreviewLayer.h` 的类声明），所以两条连接要分开收集。
+    ///
     /// 只有 iOS 17 起才有 `AVCaptureDevice.RotationCoordinator`（本项目的最低版本是
     /// 16.0），所以这里是 iOS 16 上唯一的做法：拿界面方向，手工写进连接。
     private func applyInterfaceOrientation() {
-        guard let connection = previewLayer.connection,
-              connection.isVideoOrientationSupported,
-              let target = AVCaptureVideoOrientation(
-                interfaceOrientation: window?.windowScene?.interfaceOrientation) else { return }
-        // 值没变就不写：`layoutSubviews` 会被叫很多次，而给连接重复赋同一个值是白做。
-        guard connection.videoOrientation != target else { return }
-        connection.videoOrientation = target
+        guard let target = AVCaptureVideoOrientation(
+            interfaceOrientation: window?.windowScene?.interfaceOrientation) else { return }
+        let connections = [previewLayer.connection]
+            + (previewLayer.session?.outputs ?? []).map { $0.connection(with: .video) }
+        for connection in connections.compactMap({ $0 }) {
+            guard connection.isVideoOrientationSupported else { continue }
+            // 值没变就不写：`layoutSubviews` 会被叫很多次，而给连接重复赋同一个值是白做。
+            guard connection.videoOrientation != target else { continue }
+            connection.videoOrientation = target
+        }
     }
 }
 

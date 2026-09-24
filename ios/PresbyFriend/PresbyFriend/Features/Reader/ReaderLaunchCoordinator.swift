@@ -132,6 +132,12 @@ final class ReaderLaunchCoordinator: ObservableObject {
         // 同上：这条路径没有识别动作，也就无从谈起「识别语言可能不对」。
         languageHint = nil
         fallbackImage = nil
+        // **`paragraphs` 也必须清，这一手不是对称性的洁癖。** `ReaderView.onAppear` 只要
+        // 拿到的 `paragraphs` 非空就**整段忽略**同时传进去的 `text`（见那里的分支）。
+        // 于是这条路径有个不明显的后果：一次 OCR 成功之后，凡走文本入口（粘贴、URL 正文、
+        // 分享）打开的阅读页，显示的都是**上一次识别结果**，而不是用户刚给的那段——
+        // 直到杀进程重开。`open(image:)` 那条路一早就清了它，只有这里漏了。
+        paragraphs = nil
         self.text = trimmed
         isPresenting = true
         SubscriptionManager.shared.recordUse()
@@ -331,6 +337,10 @@ final class ReaderLaunchCoordinator: ObservableObject {
         recognitionFailed = false
         languageHint = nil
         text = nil
+        // 与 `open(text:)` 同一件事：`paragraphs` 是**独立的一份内容**，清 `text` 清不掉它。
+        // 留着它，下一次从文本入口打开阅读页就会拿上一次 OCR 的正文渲染（见 `open(text:)`
+        // 里那段）。两条清理入口（开、关）都得带上它。
+        paragraphs = nil
         fallbackImage = nil
     }
 }

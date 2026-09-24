@@ -59,21 +59,19 @@ struct ReaderView: View {
                 }
                 .padding(.vertical, 32)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .overlay {
-                    if vm.rulerEnabled {
-                        GeometryReader { geo in
-                            Color.clear
-                                .onAppear { rulerY = geo.frame(in: .global).minY }
-                                .onChange(of: geo.frame(in: .global).minY) { new in
-                                    rulerY = new
-                                }
-                        }
-                    }
-                }
             }
 
+            // 标尺的坐标基准是**阅读区顶边**（这个 `GeometryReader` 的 `0`），不是滚动
+            // 内容，也不是屏幕底边。原先这里挂着一个量「滚动内容顶边的全局 Y」的
+            // `GeometryReader`，把那个数喂给锚在底边的带子——落点因此在屏幕外。
+            // 位置现在完全由用户拖出来，见 `ReadingRuler`。
             if vm.rulerEnabled {
-                ReadingRuler(yPosition: $rulerY)
+                GeometryReader { geo in
+                    ReadingRuler(yPosition: $rulerY,
+                                 lineHeight: vm.fontSize * vm.lineHeight * 1.2,
+                                 maxY: geo.size.height,
+                                 accent: vm.theme.accentColor)
+                }
             }
 
             if vm.controlsVisible {
