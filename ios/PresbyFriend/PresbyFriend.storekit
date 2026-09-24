@@ -1,118 +1,142 @@
 {
-  "appPolicies" : {
-    "eula" : "",
-    "policies" : [
+  "appPolicies": {
+    "eula": "",
+    "policies": [
       {
-        "locale" : "en_US",
-        "policyText" : "",
-        "policyURL" : ""
+        "locale": "en_US",
+        "policyText": "",
+        "policyURL": ""
       }
     ]
   },
-  "identifier" : "A740DEA1",
-  "nonRenewingSubscriptions" : [
-
-  ],
-  "products" : [
-
-  ],
-  "settings" : {
-    "_askToBuyEnabled" : false,
-    "_billingGracePeriodEnabled" : false,
-    "_billingIssuesEnabled" : false,
-    "_disableDialogs" : false,
-    "_failTransactionsEnabled" : false,
-    "_locale" : "en_US",
-    "_renewalBillingIssuesEnabled" : false,
-    "_storefront" : "USA",
-    "_storeKitErrors" : [
-
-    ],
-    "_timeRate" : 0
+  "identifier": "5AF6AFF1",
+  "nonRenewingSubscriptions": [],
+  "products": [],
+  "settings": {
+    "_failTransactionsEnabled": false,
+    "_locale": "en_US",
+    "_storefront": "USA",
+    "_storeKitErrors": [
+      {
+        "current": {
+          "index": 2,
+          "type": "generic"
+        },
+        "enabled": false,
+        "name": "Load Products"
+      },
+      {
+        "current": {
+          "index": 1,
+          "type": "purchase"
+        },
+        "enabled": false,
+        "name": "Purchase"
+      },
+      {
+        "current": {
+          "index": 0,
+          "type": "verification"
+        },
+        "enabled": false,
+        "name": "Verification"
+      },
+      {
+        "current": null,
+        "enabled": false,
+        "name": "App Store Sync"
+      },
+      {
+        "current": {
+          "index": 2,
+          "type": "generic"
+        },
+        "enabled": false,
+        "name": "Subscription Status"
+      },
+      {
+        "current": {
+          "index": 3,
+          "type": "generic"
+        },
+        "enabled": false,
+        "name": "App Transaction"
+      },
+      {
+        "current": null,
+        "enabled": false,
+        "name": "Manage Subscriptions Sheet"
+      },
+      {
+        "current": null,
+        "enabled": false,
+        "name": "Refund Request Sheet"
+      },
+      {
+        "current": {
+          "index": 4,
+          "type": "generic"
+        },
+        "enabled": false,
+        "name": "Offer Code Redeem Sheet"
+      }
+    ]
   },
-  "subscriptionBundleGroups" : [
-
-  ],
-  "subscriptionGroups" : [
+  "subscriptionGroups": [
     {
-      "id" : "21552348",
-      "localizations" : [
-
-      ],
-      "name" : "PresbyFriend Pro",
-      "subscriptions" : [
+      "id": "5FB1151D",
+      "localizations": [],
+      "name": "PresbyFriend Pro",
+      "subscriptions": [
         {
-          "adHocOffers" : [
-
-          ],
-          "codeOffers" : [
-
-          ],
-          "displayPrice" : "2.99",
-          "familyShareable" : false,
-          "groupNumber" : 1,
-          "internalID" : "6740337961",
-          "introductoryOffer" : null,
-          "introductoryOffers" : [
-
-          ],
-          "isFamilyShareable" : false,
-          "localizations" : [
+          "adHocOffers": [],
+          "codeOffers": [],
+          "displayPrice": "2.99",
+          "familyShareable": false,
+          "groupNumber": 1,
+          "internalID": "78CA55F3",
+          "introductoryOffer": null,
+          "localizations": [
             {
-              "description" : "Unlimited reading, every day.",
-              "displayName" : "PresbyFriend Pro (Monthly)",
-              "locale" : "en_US"
+              "description": "Unlimited reading, every day.",
+              "displayName": "PresbyFriend Pro (Monthly)",
+              "locale": "en_US"
             }
           ],
-          "productID" : "com.presbyfriend.pro.monthly",
-          "recurringSubscriptionPeriod" : "P1M",
-          "referenceName" : "Pro Monthly",
-          "subscriptionGroupID" : "21552348",
-          "type" : "RecurringSubscription",
-          "winbackOffers" : [
-
-          ]
+          "productID": "com.presbyfriend.pro.monthly",
+          "recurringSubscriptionPeriod": "P1M",
+          "referenceName": "Pro Monthly",
+          "subscriptionGroupID": "5FB1151D",
+          "type": "RecurringSubscription",
+          "winbackOffers": []
         },
         {
-          "adHocOffers" : [
-
-          ],
-          "codeOffers" : [
-
-          ],
-          "displayPrice" : "19.99",
-          "familyShareable" : false,
-          "groupNumber" : 1,
-          "internalID" : "6740337962",
-          "introductoryOffer" : null,
-          "introductoryOffers" : [
-
-          ],
-          "isFamilyShareable" : false,
-          "localizations" : [
+          "adHocOffers": [],
+          "codeOffers": [],
+          "displayPrice": "19.99",
+          "familyShareable": false,
+          "groupNumber": 1,
+          "internalID": "E6400579",
+          "introductoryOffer": null,
+          "localizations": [
             {
-              "description" : "Unlimited reading, every day. Best value.",
-              "displayName" : "PresbyFriend Pro (Yearly)",
-              "locale" : "en_US"
+              "description": "Unlimited reading, every day. Best value.",
+              "displayName": "PresbyFriend Pro (Yearly)",
+              "locale": "en_US"
             }
           ],
-          "productID" : "com.presbyfriend.pro.yearly",
-          "recurringSubscriptionPeriod" : "P1Y",
-          "referenceName" : "Pro Yearly",
-          "subscriptionGroupID" : "21552348",
-          "type" : "RecurringSubscription",
-          "winbackOffers" : [
-
-          ]
+          "productID": "com.presbyfriend.pro.yearly",
+          "recurringSubscriptionPeriod": "P1Y",
+          "referenceName": "Pro Yearly",
+          "subscriptionGroupID": "5FB1151D",
+          "type": "RecurringSubscription",
+          "winbackOffers": []
         }
       ]
     }
   ],
-  "subscriptionSuiteGroups" : [
-
-  ],
-  "version" : {
-    "major" : 6,
-    "minor" : 3
+  "version": {
+    "major": 4,
+    "minor": 0
   }
 }

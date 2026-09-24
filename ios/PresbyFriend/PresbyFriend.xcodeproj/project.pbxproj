@@ -37,7 +37,7 @@
 /* Begin PBXFileReference section */
 		047889FE2FEA440800EDB3E1 /* PresbyFriend.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PresbyFriend.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		04788A9E2FEA482800EDB3E1 /* shareextention.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = shareextention.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		04788AB32FEA482800EDB3E1 /* PresbyFriend.storekit */ = {isa = PBXFileReference; lastKnownFileType = "com.apple.dt.storekit"; path = PresbyFriend.storekit; sourceTree = "<group>"; };
+		04788AB32FEA482800EDB3E1 /* PresbyFriend.storekit */ = {isa = PBXFileReference; lastKnownFileType = com.apple.dt.storekit; path = PresbyFriend.storekit; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -53,7 +53,6 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		04788A002FEA440800EDB3E1 /* PresbyFriend */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = ();
 			path = PresbyFriend;
 			sourceTree = "<group>";
 		};

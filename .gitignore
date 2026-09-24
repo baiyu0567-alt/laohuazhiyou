@@ -1,6 +1,22 @@
 # Xcode
 *.xcuserdata
 *.xcworkspace
+# 上面的 *.xcworkspace 是给 CocoaPods 生成的 Pods.xcworkspace / Foo.xcworkspace 用的，
+# 但它**连 <工程>.xcodeproj/project.xcworkspace 一起吞了**——那是 .xcodeproj 包的一部分，
+# 不是生成物（Xcode 自己建工程也会写它，里面是声明容器的 <FileRef location="self:">），
+# 所以开个口子让它入库，否则新克隆下来的 .xcodeproj 是缺一块的。
+#
+# 下面这段讲的是同一件事的另一半，别混：scheme 里 StoreKitConfigurationFileReference 的
+# identifier 实测（2026-09-24，三次运行对照）是以 **<工程>.xcodeproj/project.xcworkspace/** 为
+# 基准解析的，于是
+#     identifier = "../PresbyFriend.storekit"  →  <工程>.xcodeproj/PresbyFriend.storekit
+# 正是 Xcode 报「StoreKit Configuration file for scheme … can't be found」时点名的那个路径。
+# 真正的配置在 ios/PresbyFriend/PresbyFriend.storekit，上面那个路径由这条软链补上：
+#     <工程>.xcodeproj/PresbyFriend.storekit -> ../PresbyFriend.storekit
+# 三次对照：写 "../…" 且有软链 = 成功；写 "../…" 但没软链 = 报找不到；
+# 写不带 "../" 的 "PresbyFriend.storekit" = Xcode 干脆不启用测试配置（storekitd 回落 Sandbox）。
+# 两条都承重，删哪一条都会退回失败态。
+!**/*.xcodeproj/project.xcworkspace/
 DerivedData/
 *.pbxuser
 !default.pbxuser
