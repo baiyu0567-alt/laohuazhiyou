@@ -108,8 +108,20 @@ xcrun simctl spawn <UDID> log show --last 6h \
 **⚠️ 只清源库不够**：源库清空后缓存**不会自己删**，`currentEntitlements` 继续读缓存里的收据
 → App 一直判自己 Pro。
 
-症状很有迷惑性：storekitd 日志里同时出现 `Query returned 0` 和 `Query returned 1`
-（`unfinished` 与 `currentEntitlements` 两个查询**同毫秒、同线程**，日志分不出归属）。
+症状很有迷惑性：storekitd 日志里同时出现 `Query returned 0` 和 `Query returned 1`。
+
+**归属怎么分：看方括号里的线程号。** 两条 `Querying transaction store <kind>` 各自带 tid，
+紧接着的 `Query returned N` 带同一个 tid：
+
+```
+02:43:32.304 [80427] Querying transaction store currentEntitlements(productID: nil) with client(…)
+02:43:32.304 [80429] Querying transaction store unfinished with client(…)
+02:43:32.305 [80429] Query returned 0 transactions
+02:43:32.305 [80427] Query returned 1 transactions      ← currentEntitlements 有 1 条 = 订阅在
+```
+
+> 📌 本文件早先把这句写成「同毫秒、**同线程**，日志分不出归属」。2026-09-24 复测：两条查询
+> 落在**不同**线程，归属分得出来。真碰上同线程再另想办法。
 
 **正确顺序：**
 
@@ -140,6 +152,27 @@ plutil -p <上面那个路径>/Library/Preferences/com.presbyfriend.plist
 - `plutil` 比 `defaults read <path>` 可靠。
 - cfprefsd 异步落盘：**写完要等一次刷盘**，文件 mtime 前进才算数。
 
+### 4.1 ⚠️ 读之前先让 App 退出，否则读到的是上一次刷盘的值
+
+App 还在跑时，plist 文件可以**落后于内存里的真实值**。2026-09-24 实测踩了一次：
+把 `isProCached` 踩成 `false` 再启动 App，启动校验明明查到了订阅、写回了 `true`，
+但**没退 App 就 `plutil`**，读到的是我 stage 的那个 `false`——差点记成「启动校验没生效」。
+
+```bash
+xcrun simctl terminate <UDID> com.presbyfriend   # 退出会触发刷盘
+stat -f "%Sm" <plist>                            # mtime 必须晚于你上一次写它的时刻
+plutil -p <plist> | grep isProCached
+```
+
+### 4.2 怎么验「启动即校验 + 落盘」（不需要 ⌘R）
+
+1. 退出 App → 杀 cfprefsd（§3 取 PID 的办法）→ `plutil -replace isProCached -bool false`
+2. `xcrun simctl launch`——**测试配置挺得过 App 重启**（见 §5 末），这一轮仍是 XcodeTest
+3. 退出 App，按 4.1 读：**`isProCached` 变回 `true`** ⇒ 启动校验确实查到了权益并落了盘
+4. 旁证：storekitd 里那两条 `Querying…` / `Query returned 1`（§3）
+
+缓存从 `false` 被查回 `true`，2026-09-24 跑通。
+
 ---
 
 ## 5. CLI 做不到的事（省得重查）
@@ -156,7 +189,13 @@ plutil -p <上面那个路径>/Library/Preferences/com.presbyfriend.plist
 5. **别拿「搜设备文件系统」当判据**：`grep -rl "com.presbyfriend.pro.monthly" <dev>/data`
    只会在**剪贴板缓存**里命中。配置走 XPC 送进 storekitd，**不一定落盘**，「搜不到」证明不了什么。
 
-→ **运行时那一步的 `⌘R` 绕不过去。**
+→ **首次注入那一步的 `⌘R` 绕不过去。**
+
+> 📌 **但注入只做一次。** 2026-09-24 实测：配置**挺得过 App 重启**——`simctl terminate` 之后再
+> `simctl launch`，storekitd 仍以同一套客户端上下文服务它：
+> `Running task with context: ([Client] com.presbyfriend (PresbyFriend) XcodeTest(file:///…/Persistence/Octane/com.presbyfriend/))`。
+> 所以「杀掉 App 重开 → 仍是 Pro」这类**重启类**验证，CLI 自己就能做（§4.2）；
+> 只有换了构建产物 / 换了容器之后，才需要再 ⌘R 一次。
 
 ---
 
