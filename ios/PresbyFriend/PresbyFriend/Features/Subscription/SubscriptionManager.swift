@@ -100,6 +100,21 @@ final class SubscriptionManager: ObservableObject {
             // 直接渲染的话付费墙上的月付/年付可能这次在上、下次在下——同一屏内容换位置，
             // 对需要靠位置记东西的用户是实打实的干扰。
             let loaded = try await Product.products(for: productIDs)
+            // ⚠️ **空列表不抛错，所以下面那个 `catch` 抓不到它**——而这恰恰是 scheme 的
+            // StoreKit 配置没被应用时的表现：查询「成功」返回空数组，没有异常、没有日志、
+            // `storeMessage` 保持 nil，付费墙静静退到 fallback 价签，用户点下去什么都不会发生。
+            //
+            // 这与 Android 侧那个最隐蔽的坑是**同一个故障模式**：「缺 BILLING 权限时
+            // `queryProductDetailsAsync` 返回空列表，而 `responseCode` 仍然是 OK」。
+            // 两边的教训也一样——**只看有没有报错是看不出来的，必须单独看列表长度**。
+            // 所以这里必须记一笔，它是唯一能把「还没配商品」和「配置没生效」分开的线索。
+            if loaded.isEmpty {
+                // 先取成局部常量再插值：`Logger` 的插值参数是 `@autoclosure`，
+                // 在里面直接引用实例属性会要求显式 `self.`。
+                let requested = productIDs.joined(separator: ", ")
+                Self.logger.error(
+                    "商品列表为空且未抛错 —— 优先怀疑 scheme 的 StoreKit 配置没被应用（productIDs: \(requested, privacy: .public)）")
+            }
             products = productIDs.compactMap { id in loaded.first { $0.id == id } }
         } catch {
             Self.logger.error("载入商品失败: \(error, privacy: .public)")
