@@ -130,15 +130,15 @@ struct ShareView: View {
 
     private func loadImage(_ source: OCRImageSource) async {
         // 与 App 内 `ContentView.applyRecognitionLanguages()` 同一套输入：**设备语言** +
-        // 用户选的档位。两边共享同一个 `SettingsModel`（`ios-v1` 上经 App Group），
-        // 所以同一台设备上 App 和扩展解析出同一档。
+        // 用户选的档位。`SettingsModel.swift` 同时编进 App 和扩展两个 target，两边也都签了
+        // 同一个 App Group（`group.35MJ76582H.com.presbyfriend`，两份 entitlements 里都有），
+        // 读写的是同一份 suite——**包括用户手动选的那一档**。所以同一台设备上 App 和扩展
+        // 解析出同一档。
         //
-        // ⚠️ 本分支 `device-test-noshare` 关掉了 App Group（免费 Personal Team 签不了），
-        // 扩展读到的 `settings.recognitionLanguage` 是它自己容器里的默认值 `.followSystem`，
-        // 而设备语言两边是同一个，所以**默认档在扩展里依然是对的**——这一点比改动前好：
-        // 以前这里读的是 `settings.language`（界面语言），扩展拿到的一律是 `"en"`，
-        // 于是「跟随 App 语言」在扩展里恒为 `en-US`。现在默认档不再依赖那个读不到的值了。
-        // 仍然读不到的是**用户手动选的档位**，那要等合并回 `ios-v1`（App Group 恢复）。
+        // 基准取**设备语言**，不取 App 的界面语言（`settings.language`）：`.followSystem`
+        // 的语义就是「跟随设备」，而界面语言在扩展里未必与 App 相同。以前这里读的正是
+        // `settings.language`，于是「跟随 App 语言」在扩展里恒为 `en-US`；现在默认档不再
+        // 依赖那个值。
         let deviceLanguageCode = Locale.preferredLanguages.first
         let service = TextRecognitionService(
             languages: RecognitionLanguage.visionLanguages(
@@ -147,21 +147,24 @@ struct ShareView: View {
                 supported: OCRSupportedLanguageCodes.all))
 
         // ⚠️ **分享扩展这条路径有意不设免费额度闸**，这是已知行为，不是漏掉的 bug。
+        // （2026-09-24 在 `ios-v1` 上逐条核对过。）
         //
-        // 三条理由，缺一条都不成立：
         //  1. 扩展里**卖不了东西**。`Product.purchase()` 需要 UI 场景锚点，在 app
         //     extension 里会以 "Could not find a UI anchor for … purchase." 失败。
         //     所以在这里拦下用户是条死路：既不能买也不能恢复，只能把人赶走。
-        //  2. Android 侧同样没闸。那边 `canUseToday()` 只出现在
-        //     `PresbyFriendAccessibilityService` 一处；`ACTION_SEND` / `ACTION_PROCESS_TEXT`
-        //     直达阅读页，不计数。扩展就是 iOS 的 `ACTION_SEND` 面，对齐即不设闸。
-        //  3. 本分支（`device-test-noshare`）App Group 是关掉的，扩展读不到 App 的
-        //     `UserDefaults`，额度与 Pro 状态一条都拿不到。硬要设闸只能改成「扩展只计数
-        //     不提示」——那是让用户**静默丢额度**，比不计数更坏。
+        //  2. Android 侧同样没闸。那边 `canUseToday()` 全仓库只有一个调用点
+        //     （`PresbyFriendAccessibilityService.kt:132`，定义在 `SettingsDataStore.kt:65`）；
+        //     `ACTION_SEND` / `ACTION_PROCESS_TEXT` 直达阅读页，不计数。扩展就是 iOS 的
+        //     `ACTION_SEND` 面，对齐即不设闸。
+        //
+        // 这两条就够支撑结论了。另记一笔**为什么连「只计数、不提示」这种折中也补不了**：
+        // 卡住的不是 App Group（扩展有，见上），而是**存储域**——`SubscriptionManager`
+        // 用的是 `UserDefaults.standard`（各进程各自容器），不是共享 suite，于是扩展读到的
+        // 计数恒为自己那份 0，闸会一路放行：看着有闸，实际等于没有，比明写「不设闸」更难查。
         //
         // 后果写清楚：用户可以把图片分享给扩展、无限制地阅读，绕过每日 10 次。
-        // 将来要堵，需要同时满足「App Group 恢复」+「扩展里放一个只读的『已到今日上限，
-        // 请打开 App』面板」，属于独立需求。
+        // 将来要堵，前提是先把 `SubscriptionManager` 的存储域搬到 App Group suite，
+        // 再在扩展里放一个只读的「已到今日上限，请打开 App」面板，属于独立需求。
         //
         // 这里不能再用 `try?`：它把 Vision 的抛错折成 `[]`，和「这张图真的没有文字」
         // 撞成同一个值，于是识别失败会被当成空结果报给用户。两种结果必须留下
