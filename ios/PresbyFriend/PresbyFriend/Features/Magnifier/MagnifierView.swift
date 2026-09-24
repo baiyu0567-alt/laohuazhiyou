@@ -3,6 +3,8 @@ import AVFoundation
 
 struct MagnifierView: View {
     @Environment(\.scenePhase) private var scenePhase
+    /// 只读它的 `isPresenting`：阅读页盖上来时相机要停，理由见下面的 `.onChange`。
+    @EnvironmentObject private var coordinator: ReaderLaunchCoordinator
     @StateObject private var vm = MagnifierViewModel()
     /// 按下快门后那一次拍照 + 交棒。存下句柄是为了离开页面时能取消它：
     /// `onDisappear` 会 `stopSession()`，此后拍照回调不再保证会来，取消才能让
@@ -132,6 +134,11 @@ struct MagnifierView: View {
         .task {
             guard !isSimulator else { return }
             await vm.requestAccess()
+            // 权限流程走完时阅读页可能已经盖在上面了（分享一个 URL 冷启动进来就是这样），
+            // 那样 `requestAccess` 刚起起来的会话会躲在阅读页背后——正是下面这条要挡的。
+            // 只在阅读页真的开着时动手：正常路径下 `requestAccess` 自己已经把会话起好了，
+            // 这里再 `setSessionActive(true)` 会重复添加同一路 input。
+            if coordinator.isPresenting { vm.setSessionActive(false) }
         }
         .onDisappear {
             // 先取消在途的拍照，再停会话：停完之后拍照回调不再保证会来，靠取消
@@ -139,6 +146,16 @@ struct MagnifierView: View {
             captureTask?.cancel()
             captureTask = nil
             vm.stopSession()
+        }
+        .onChange(of: coordinator.isPresenting) { presenting in
+            // 阅读页是**盖上来**的一层，放大镜不会 `onDisappear`——没有这一条，相机会话
+            // 会在整个阅读期间一直活着（真机实测阅读页上绿点常亮）。停/起两个方向的
+            // 不对称与理由都在 `setSessionActive(_:)` 里。
+            //
+            // ⚠️ 这里**不照抄 `onDisappear` 那手 `captureTask?.cancel()`**：阅读页是在
+            // OCR 出结果之后才呈现的，此刻那个 Task 正在收尾，取消它没有意义还可能把
+            // `recordUse()` 那一段掐掉。要收的是会话，不是这一按。
+            vm.setSessionActive(!presenting)
         }
         .onChange(of: scenePhase) { phase in
             // 只认 `.background`。`.inactive` 是「暂时不活跃」——下拉控制中心、来电

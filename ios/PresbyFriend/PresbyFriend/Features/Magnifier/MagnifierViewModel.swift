@@ -220,6 +220,32 @@ final class MagnifierViewModel: NSObject, ObservableObject {
         }
     }
 
+    /// 让会话跟着「放大镜这一屏是否真的可见」起停。
+    ///
+    /// **为什么需要它**：阅读页是 ZStack 里**盖上来**的一层（`PresbyFriendApp.swift` 的
+    /// `coordinator.isPresenting` 那段），不是 push——放大镜**不会** `onDisappear`，
+    /// 那条 `stopSession()` 永远不会被调到。真机实测（2026-09-24，iPhone 11 Pro Max）：
+    /// 阅读页上系统相机绿点**一直亮着**，会话全程活着。而阅读正是本 App 的主场景
+    /// （老花眼用户一读就是几分钟），那期间白耗电，绿点也容易让用户以为还在拍。
+    ///
+    /// **两个方向刻意不对称**：
+    /// - **起：必须先挡重复。** `startSession()` 会把同一个 device 的 input 再加一份，
+    ///   而 `AVCaptureSession` 不支持同一路输入叠两份。`isSessionRunning` 的写入又是
+    ///   异步的（`startRunning()` 返回后才置真），光靠它挡不住这个窗口。
+    /// - **停：不设闸，一律照停。** 会话可能正起在半路（此时 `isSessionRunning` 还是
+    ///   false），那种情况**也该停**——`stopSession()` 里那手代次自增正是用来作废在途
+    ///   那次启动的（见 `sessionGeneration`）。它在会话没跑时调同样安全：
+    ///   `photoSlot.finish` 对空槽只做一次判空，`turnOffFlashlight()` 自带
+    ///   `torchMode == .on` 前置。
+    func setSessionActive(_ active: Bool) {
+        if active {
+            guard cameraAccessGranted, !isSessionRunning else { return }
+            startSession()
+        } else {
+            stopSession()
+        }
+    }
+
     private func startSession() {
         guard let device else { return }
         // 代次在主 actor 上自增：`stopSession()` 也在这里自增，两者的读写必须同域
