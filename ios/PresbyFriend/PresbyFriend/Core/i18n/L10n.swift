@@ -54,6 +54,25 @@ enum L10n {
     /// 交易处于 `.pending`（Ask to Buy 等家人批准）。**不是失败，也不是成功**——
     /// 说「已解锁」是假的（此刻 `currentEntitlements` 里没有它），一句不说又像卡住了。
     static var purchasePending: String { NSLocalizedString("purchase_pending", comment: "") }
+    static var retry: String { NSLocalizedString("retry", comment: "") }
+
+    // MARK: - 订阅披露（审核条款 3.1.2 要求付费墙自己写出来）
+
+    /// 订阅周期。**必须由 `Product.subscription` 的实际周期算出来**，不能写死——
+    /// 条款要求披露的是「这个商品」的时长，商品改了价签文案不改就是虚假披露。
+    /// 本 App 只上这两个周期，所以只备了这两条；出现别的周期时 `periodText` 返回 nil，
+    /// 那一行干脆不显示，而不是猜一个。
+    static var subPeriodMonthly: String { NSLocalizedString("sub_period_monthly", comment: "") }
+    static var subPeriodYearly: String { NSLocalizedString("sub_period_yearly", comment: "") }
+
+    /// 自动续期说明。条款 3.1.2 要求写清「何时扣款、如何取消」。
+    static var subAutoRenew: String { NSLocalizedString("sub_auto_renew", comment: "") }
+
+    /// 条款 3.1.2 明文要求付费墙上有**可用的**使用条款与隐私政策链接。
+    /// 这是订阅类 App 最常见的被拒理由之一，别删。
+    static var subTermsOfUse: String { NSLocalizedString("sub_terms_of_use", comment: "") }
+    static var subPrivacyPolicy: String { NSLocalizedString("sub_privacy_policy", comment: "") }
+
     static var close: String { NSLocalizedString("close", comment: "") }
     static var noSharedContent: String { NSLocalizedString("no_shared_content", comment: "") }
     static var showControls: String { NSLocalizedString("show_controls", comment: "") }
