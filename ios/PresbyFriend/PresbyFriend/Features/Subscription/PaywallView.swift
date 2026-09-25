@@ -20,8 +20,13 @@ struct PaywallView: View {
         URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
 
     /// 隐私政策。**必须与 App Store Connect 里填的那个 URL 一致**——审核员会两边都点。
+    ///
+    /// 2026-09-25 从 `laohuazhiyou/privacy/` 搬到这里：仓库根目录那份是给 Google Play 用的，
+    /// 而 `laohuazhiyou` 是公开的源码仓库，政策文件不该躺在里面。现在所有 App 的政策
+    /// 集中在 `publication-` 这个仓库，一个 App 一个子目录。
+    /// **旧地址没有删** —— Google Play 的商店信息很可能已经指向它。
     private static let privacyPolicyURL =
-        URL(string: "https://baiyu0567-alt.github.io/laohuazhiyou/privacy/")!
+        URL(string: "https://baiyu0567-alt.github.io/publication-/presbyfriend/")!
 
     var body: some View {
         NavigationStack {
