@@ -80,6 +80,16 @@ struct ReaderView: View {
             }
         }
         .navigationTitle(L10n.readingMode)
+        // 阅读主题只铺**内容区**，导航栏标题的颜色却由**系统外观**决定——两者会在
+        // 这里打架：浅色模式的手机上选深色阅读主题，`theme.backgroundColor` 铺到
+        // 导航栏底下成了深蓝，标题却是黑的。真机实测对比度 **1.22:1**
+        // （底色 RGB 24,25,46 / 标题 RGB 0,0,0），等于看不见一个字。
+        // 状态栏不归这里管、也没坏（同一张截图实测 17.16:1），坏的只有标题。
+        //
+        // 两个方向都要钉，不能只钉深色那一头：手机是深色模式时，白/sepia/黄
+        // 三个浅底主题会反过来变成白字压浅底，同样看不见。所以按阅读主题给出
+        // 明确的外观，而不是让它跟着系统走。
+        .preferredColorScheme(vm.theme == .dark ? .dark : .light)
         .toolbar {
             if let onClose {
                 ToolbarItem(placement: .topBarLeading) {
